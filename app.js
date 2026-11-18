@@ -149,4 +149,15 @@ async function init(){bind();$('month').value=todayISO().slice(0,7);if(typeof Of
     connected=true;await refresh();return;
   }
   if(!Office.context||Office.context.host!==Office.HostType.Excel){notify('Prévia HTML: abra a interface como suplemento dentro do Excel para usar suas tabelas.');return;}connected=true;await refresh();}catch(err){console.error(err);notify('Falha ao iniciar suplemento: '+(err.message||err));}}
+// Comando nativo na faixa de opções do Excel. Usa runtime compartilhado de longa duração.
+function abrirControleFinanceiroPeloExcel(event) {
+  Promise.resolve(Office.onReady())
+    .then(() => openSeparateWindow())
+    .catch(error => console.error('Não foi possível abrir o Controle Financeiro:', error))
+    .finally(() => { try { event.completed(); } catch (error) { console.error(error); } });
+}
+if (typeof Office !== 'undefined' && Office.actions && typeof Office.actions.associate === 'function') {
+  Office.actions.associate('abrirControleFinanceiro', abrirControleFinanceiroPeloExcel);
+}
+
 init();
