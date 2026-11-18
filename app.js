@@ -41,19 +41,30 @@ async function messageFromDialog(arg) {
   }catch(e){error=e.message||String(e);}
   if(controleDialog){try{controleDialog.messageChild(JSON.stringify({kind:'cf-rpc-result',rid:msg.rid,result,error}));}catch(e){console.error(e);}}
 }
+let dialogOpening = false;
 function openSeparateWindow() {
-  if(popupMode)return;
-  if(controleDialog){notify('A janela Controle Financeiro já está aberta.');return;}
+  if(popupMode)return Promise.resolve();
+  if(controleDialog){notify('A janela Controle Financeiro já está aberta.');return Promise.resolve();}
+  if(dialogOpening)return Promise.resolve();
   if(!Office.context?.requirements?.isSetSupported?.('DialogApi','1.2')){
-    notify('Esta instalação do Office não oferece a comunicação entre janelas (DialogApi 1.2).');return;
+    const error=new Error('Esta instalação do Office não oferece DialogApi 1.2.');
+    notify(error.message);return Promise.reject(error);
   }
-  Office.context.ui.displayDialogAsync(location.origin+location.pathname+'?popup=1',{height:90,width:90},result=>{
-    if(result.status!==Office.AsyncResultStatus.Succeeded){
-      notify('Não foi possível abrir a janela: '+(result.error?.message||'erro desconhecido'));return;
-    }
-    controleDialog=result.value;
-    controleDialog.addEventHandler(Office.EventType.DialogMessageReceived,messageFromDialog);
-    controleDialog.addEventHandler(Office.EventType.DialogEventReceived,()=>{controleDialog=null;refresh();});
+  dialogOpening=true;
+  return new Promise((resolve,reject)=>{
+    try{
+      Office.context.ui.displayDialogAsync(location.origin+location.pathname+'?popup=1',{height:90,width:90},result=>{
+        dialogOpening=false;
+        if(result.status!==Office.AsyncResultStatus.Succeeded){
+          const error=new Error('Não foi possível abrir a janela: '+(result.error?.message||'erro desconhecido'));
+          notify(error.message);reject(error);return;
+        }
+        controleDialog=result.value;
+        controleDialog.addEventHandler(Office.EventType.DialogMessageReceived,messageFromDialog);
+        controleDialog.addEventHandler(Office.EventType.DialogEventReceived,()=>{controleDialog=null;refresh();});
+        resolve();
+      });
+    }catch(error){dialogOpening=false;notify(error.message||String(error));reject(error);}
   });
 }
 
@@ -151,9 +162,14 @@ async function init(){bind();$('month').value=todayISO().slice(0,7);if(typeof Of
   if(!Office.context||Office.context.host!==Office.HostType.Excel){notify('Prévia HTML: abra a interface como suplemento dentro do Excel para usar suas tabelas.');return;}connected=true;await refresh();}catch(err){console.error(err);notify('Falha ao iniciar suplemento: '+(err.message||err));}}
 // Comando nativo na faixa de opções do Excel. Usa runtime compartilhado de longa duração.
 function abrirControleFinanceiroPeloExcel(event) {
+  // Só encerra o comando do Excel depois que o Office confirmar a abertura.
   Promise.resolve(Office.onReady())
     .then(() => openSeparateWindow())
-    .catch(error => console.error('Não foi possível abrir o Controle Financeiro:', error))
+    .catch(error => {
+      console.error('Falha no botão da faixa de opções do Controle Financeiro:', error);
+      // Se a janela não puder abrir, apresenta o diagnóstico no painel lateral.
+      try { if(typeof Office.addin?.showAsTaskpane==='function') Office.addin.showAsTaskpane(); } catch(e) { console.error(e); }
+    })
     .finally(() => { try { event.completed(); } catch (error) { console.error(error); } });
 }
 if (typeof Office !== 'undefined' && Office.actions && typeof Office.actions.associate === 'function') {
