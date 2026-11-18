@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+ xsi:type="TaskPaneApp">
+  <Id>2c56479a-718f-45ed-80e5-47a83b6b53d6</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Controle Financeiro</ProviderName>
+  <DefaultLocale>pt-BR</DefaultLocale>
+  <DisplayName DefaultValue="Controle Financeiro"/>
+  <Description DefaultValue="Aplicativo de finanças pessoais em janela HTML conectado às tabelas do Excel."/>
+  <IconUrl DefaultValue="https://everton-miranda.github.io/financa-clara-web/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://everton-miranda.github.io/financa-clara-web/icon-64.png"/>
+  <SupportUrl DefaultValue="https://github.com/everton-miranda/financa-clara-web"/>
+  <AppDomains><AppDomain>https://everton-miranda.github.io</AppDomain></AppDomains>
+  <Hosts><Host Name="Workbook"/></Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="ExcelApi" MinVersion="1.1"/>
+      <Set Name="SharedRuntime" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
+  <DefaultSettings><SourceLocation DefaultValue="https://everton-miranda.github.io/financa-clara-web/index.html"/></DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Workbook">
+        <Runtimes><Runtime resid="CF.App.Url" lifetime="long"/></Runtimes>
+        <DesktopFormFactor>
+          <FunctionFile resid="CF.App.Url"/>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="CF.Ribbon.Group">
+                <Label resid="CF.Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="CF.Icon16"/>
+                  <bt:Image size="32" resid="CF.Icon32"/>
+                  <bt:Image size="80" resid="CF.Icon80"/>
+                </Icon>
+                <Control xsi:type="Button" id="CF.OpenWindow">
+                  <Label resid="CF.Open.Label"/>
+                  <Supertip>
+                    <Title resid="CF.Open.Label"/>
+                    <Description resid="CF.Open.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="CF.Icon16"/>
+                    <bt:Image size="32" resid="CF.Icon32"/>
+                    <bt:Image size="80" resid="CF.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction"><FunctionName>abrirControleFinanceiro</FunctionName></Action>
+                </Control>
+                <Control xsi:type="Button" id="CF.OpenSidePane">
+                  <Label resid="CF.Side.Label"/>
+                  <Supertip>
+                    <Title resid="CF.Side.Label"/>
+                    <Description resid="CF.Side.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="CF.Icon16"/>
+                    <bt:Image size="32" resid="CF.Icon32"/>
+                    <bt:Image size="80" resid="CF.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="CF.App.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="CF.Icon16" DefaultValue="https://everton-miranda.github.io/financa-clara-web/icon-32.png"/>
+        <bt:Image id="CF.Icon32" DefaultValue="https://everton-miranda.github.io/financa-clara-web/icon-32.png"/>
+        <bt:Image id="CF.Icon80" DefaultValue="https://everton-miranda.github.io/financa-clara-web/icon-64.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="CF.App.Url" DefaultValue="https://everton-miranda.github.io/financa-clara-web/index.html"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="CF.Group.Label" DefaultValue="Controle Financeiro"/>
+        <bt:String id="CF.Open.Label" DefaultValue="Abrir Controle Financeiro"/>
+        <bt:String id="CF.Side.Label" DefaultValue="Painel lateral"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="CF.Open.Tooltip" DefaultValue="Abre o aplicativo financeiro em uma janela separada, com botão X, mantendo os dados no Excel."/>
+        <bt:String id="CF.Side.Tooltip" DefaultValue="Abre uma versão lateral do painel para consultas ou testes."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
