@@ -1,6 +1,62 @@
-/* Finança Clara v4 — Office.js. Nenhum dado financeiro é enviado para servidores. */
+/* Controle Financeiro v4 — Office.js. Nenhum dado financeiro é enviado para servidores. */
 'use strict';
 const $ = id => document.getElementById(id);
+const popupMode = new URLSearchParams(location.search).get('popup') === '1';
+let controleDialog = null, rpcNext = 0;
+const rpcPending = new Map();
+function dialogCall(action,payload={}) {
+  return new Promise((resolve,reject) => {
+    const rid = 'cf-'+(++rpcNext);
+    const timeout = setTimeout(() => {rpcPending.delete(rid);reject(new Error('Tempo esgotado na comunicação com o Excel.'));},45000);
+    rpcPending.set(rid,{resolve,reject,timeout});
+    try { Office.context.ui.messageParent(JSON.stringify({kind:'cf-rpc',rid,action,payload})); }
+    catch(err){clearTimeout(timeout);rpcPending.delete(rid);reject(err);}
+  });
+}
+function replyFromHost(arg) {
+  let msg; try {msg=JSON.parse(arg.message);} catch {return;}
+  if(msg.kind!=='cf-rpc-result')return;
+  const slot=rpcPending.get(msg.rid);if(!slot)return;
+  clearTimeout(slot.timeout);rpcPending.delete(msg.rid);
+  if(msg.error)slot.reject(new Error(msg.error));else slot.resolve(msg.result);
+}
+async function messageFromDialog(arg) {
+  if(arg.origin && arg.origin!==location.origin)return;
+  let msg;try{msg=JSON.parse(arg.message);}catch{return;}
+  if(msg.kind!=='cf-rpc')return;
+  const p=msg.payload||{};let result=null,error=null;
+  try {
+    switch(msg.action) {
+      case 'readAll':result=await readAll(p.month);break;
+      case 'upsertEntry':
+        if(String(p.item?.id||'').startsWith('__r_'))db=await readAll(p.month);
+        await upsertEntry(p.item);break;
+      case 'deleteEntry':
+        if(String(p.id||'').startsWith('__r_'))db=await readAll(p.month);
+        await deleteEntry(p.id);break;
+      case 'upsertBudgets':await upsertBudgets(p.changes,p.month);break;
+      case 'upsertClosing':await upsertClosing(p.snapshot);break;
+      default:throw new Error('Operação não permitida.');
+    }
+  }catch(e){error=e.message||String(e);}
+  if(controleDialog){try{controleDialog.messageChild(JSON.stringify({kind:'cf-rpc-result',rid:msg.rid,result,error}));}catch(e){console.error(e);}}
+}
+function openSeparateWindow() {
+  if(popupMode)return;
+  if(controleDialog){notify('A janela Controle Financeiro já está aberta.');return;}
+  if(!Office.context?.requirements?.isSetSupported?.('DialogApi','1.2')){
+    notify('Esta instalação do Office não oferece a comunicação entre janelas (DialogApi 1.2).');return;
+  }
+  Office.context.ui.displayDialogAsync(location.origin+location.pathname+'?popup=1',{height:90,width:90},result=>{
+    if(result.status!==Office.AsyncResultStatus.Succeeded){
+      notify('Não foi possível abrir a janela: '+(result.error?.message||'erro desconhecido'));return;
+    }
+    controleDialog=result.value;
+    controleDialog.addEventHandler(Office.EventType.DialogMessageReceived,messageFromDialog);
+    controleDialog.addEventHandler(Office.EventType.DialogEventReceived,()=>{controleDialog=null;refresh();});
+  });
+}
+
 const money = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v)||0);
 const compact = v => new Intl.NumberFormat('pt-BR',{notation:'compact',maximumFractionDigits:1}).format(Number(v)||0);
 const safe = value => String(value??'').replace(/[&<>"']/g,k=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[k]));
@@ -26,8 +82,9 @@ const currentMonth=()=>String($('month').value||'');
 const currentItems=()=>db.items.filter(x=>monthKey(x)===currentMonth());
 function notify(msg){$('toast').textContent=msg;$('toast').classList.add('show');clearTimeout(notify.timeout);notify.timeout=setTimeout(()=>$('toast').classList.remove('show'),5000);}
 function rowsFromTable(table){const values=table.values||[],texts=table.text||[];return values.slice(1).map((row,i)=>({row,text:texts[i+1]||[]}));}
-async function readAll(){
-  if(!connected)throw Error('Abra este painel como suplemento dentro do Excel, na pasta de trabalho FinancaClara.xlsx.');
+async function readAll(monthArg=currentMonth()){
+  if(popupMode)return dialogCall('readAll',{month:monthArg});
+  if(!connected)throw Error('Abra este painel como suplemento dentro do Excel, na pasta de trabalho Controle Financeiro.xlsx.');
   return Excel.run(async context=>{
     const ranges={};
     for(const [key,name] of Object.entries(TABLES)){
@@ -41,7 +98,7 @@ async function readAll(){
       amount:Number(row[6])||0,status:String(row[7]??'').trim()||'Pago',notes:String(row[8]??'').trim()
     })).filter(x=>x.date && (x.type==='Receita'||x.type==='Despesa') && x.amount>0);
     const categories=rowsFromTable(ranges.categories).map(({row})=>({name:String(row[0]??'').trim(),type:String(row[1]??'').trim()})).filter(x=>x.name);
-    const month=currentMonth();
+    const month=monthArg;
     const budgets={};
     rowsFromTable(ranges.budgets).forEach(({row})=>{if(String(row[0]??'').trim()===month)budgets[String(row[1]??'').trim()]=Number(row[2])||0;});
     const closings=rowsFromTable(ranges.closings).map(({row})=>({month:String(row[0]??'').trim(),income:Number(row[1])||0,expense:Number(row[2])||0,balance:Number(row[3])||0,pending:Number(row[4])||0,closedAt:String(row[5]??''),notes:String(row[6]??'')})).filter(x=>x.month);
@@ -68,18 +125,28 @@ function modal(id){$('entryForm').reset();$('entryId').value='';$('date').value=
 function closeModal(){$('modal').classList.remove('show');}
 function entryRow(x){return [xlsSafe(x.id),excelDate(x.date),x.type,xlsSafe(x.description),xlsSafe(x.category),xlsSafe(x.account),Number(x.amount),x.status,xlsSafe(x.notes)];}
 function newId(){return 'FC-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);}
-async function upsertEntry(item){await Excel.run(async context=>{const table=context.workbook.tables.getItem(TABLES.items),range=table.getRange();range.load('values');await context.sync();const rows=range.values.slice(1);let index=rows.findIndex(row=>String(row[0])===item.id);if(index<0 && item.id.startsWith('__r_')){const source=db.items.find(x=>x.id===item.id),i=Number(item.id.slice(4));if(source && i>=0 && i<rows.length && !String(rows[i][0]??'').trim() && isoDate(rows[i][1])===source.date && String(rows[i][3]??'').trim()===source.description){index=i;item.id=newId();}else throw Error('A tabela mudou desde a última atualização. Clique em Atualizar antes de editar.');}if(index>=0)table.rows.getItemAt(index).getRange().values=[entryRow(item)];else table.rows.add(null,[entryRow(item)]);await context.sync();});}
-async function deleteEntry(id){await Excel.run(async context=>{const table=context.workbook.tables.getItem(TABLES.items),range=table.getRange();range.load('values');await context.sync();let index=range.values.slice(1).findIndex(r=>String(r[0])===id);if(index<0 && id.startsWith('__r_')){const source=db.items.find(x=>x.id===id),i=Number(id.slice(4)),rows=range.values.slice(1);if(source&&i>=0&&i<rows.length&&!String(rows[i][0]??'').trim()&&isoDate(rows[i][1])===source.date&&String(rows[i][3]??'').trim()===source.description)index=i;}if(index<0)throw Error('Lançamento não encontrado ou planilha alterada. Atualize o painel.');table.rows.getItemAt(index).delete();await context.sync();});}
-async function upsertBudgets(changes){await Excel.run(async context=>{const table=context.workbook.tables.getItem(TABLES.budgets),range=table.getRange();range.load('values');await context.sync();const rows=range.values.slice(1),add=[];for(const [cat,amount] of Object.entries(changes)){const i=rows.findIndex(r=>String(r[0])===currentMonth()&&String(r[1])===cat);const row=[currentMonth(),xlsSafe(cat),Number(amount)];if(i>=0)table.rows.getItemAt(i).getRange().values=[row];else if(amount>0)add.push(row);}if(add.length)table.rows.add(null,add);await context.sync();});}
-async function upsertClosing(snapshot){await Excel.run(async context=>{const table=context.workbook.tables.getItem(TABLES.closings),range=table.getRange();range.load('values');await context.sync();const idx=range.values.slice(1).findIndex(r=>String(r[0])===snapshot[0]);if(idx>=0)table.rows.getItemAt(idx).getRange().values=[snapshot];else table.rows.add(null,[snapshot]);await context.sync();});}
+async function upsertEntry(item){if(popupMode)return dialogCall('upsertEntry',{item,month:currentMonth()});await Excel.run(async context=>{const table=context.workbook.tables.getItem(TABLES.items),range=table.getRange();range.load('values');await context.sync();const rows=range.values.slice(1);let index=rows.findIndex(row=>String(row[0])===item.id);if(index<0 && item.id.startsWith('__r_')){const source=db.items.find(x=>x.id===item.id),i=Number(item.id.slice(4));if(source && i>=0 && i<rows.length && !String(rows[i][0]??'').trim() && isoDate(rows[i][1])===source.date && String(rows[i][3]??'').trim()===source.description){index=i;item.id=newId();}else throw Error('A tabela mudou desde a última atualização. Clique em Atualizar antes de editar.');}if(index>=0)table.rows.getItemAt(index).getRange().values=[entryRow(item)];else table.rows.add(null,[entryRow(item)]);await context.sync();});}
+async function deleteEntry(id){if(popupMode)return dialogCall('deleteEntry',{id,month:currentMonth()});await Excel.run(async context=>{const table=context.workbook.tables.getItem(TABLES.items),range=table.getRange();range.load('values');await context.sync();let index=range.values.slice(1).findIndex(r=>String(r[0])===id);if(index<0 && id.startsWith('__r_')){const source=db.items.find(x=>x.id===id),i=Number(id.slice(4)),rows=range.values.slice(1);if(source&&i>=0&&i<rows.length&&!String(rows[i][0]??'').trim()&&isoDate(rows[i][1])===source.date&&String(rows[i][3]??'').trim()===source.description)index=i;}if(index<0)throw Error('Lançamento não encontrado ou planilha alterada. Atualize o painel.');table.rows.getItemAt(index).delete();await context.sync();});}
+async function upsertBudgets(changes,monthArg=currentMonth()){if(popupMode)return dialogCall('upsertBudgets',{changes,month:monthArg});await Excel.run(async context=>{const table=context.workbook.tables.getItem(TABLES.budgets),range=table.getRange();range.load('values');await context.sync();const rows=range.values.slice(1),add=[];for(const [cat,amount] of Object.entries(changes)){const i=rows.findIndex(r=>String(r[0])===monthArg&&String(r[1])===cat);const row=[monthArg,xlsSafe(cat),Number(amount)];if(i>=0)table.rows.getItemAt(i).getRange().values=[row];else if(amount>0)add.push(row);}if(add.length)table.rows.add(null,add);await context.sync();});}
+async function upsertClosing(snapshot){if(popupMode)return dialogCall('upsertClosing',{snapshot});await Excel.run(async context=>{const table=context.workbook.tables.getItem(TABLES.closings),range=table.getRange();range.load('values');await context.sync();const idx=range.values.slice(1).findIndex(r=>String(r[0])===snapshot[0]);if(idx>=0)table.rows.getItemAt(idx).getRange().values=[snapshot];else table.rows.add(null,[snapshot]);await context.sync();});}
 async function performSave(fn,ok){if(!connected){notify('Abra o painel pelo Excel antes de salvar dados.');return false;}try{await fn();await refresh();notify(ok);return true;}catch(err){console.error(err);notify('Não foi possível salvar: '+(err.message||err));return false;}}
-function bind(){document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>go(b.dataset.screen)));document.querySelectorAll('input[name=type]').forEach(el=>el.addEventListener('change',populateCategories));
+function bind(){if($('openWindow')){if(popupMode)$('openWindow').style.display='none';else $('openWindow').onclick=openSeparateWindow;}document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>go(b.dataset.screen)));document.querySelectorAll('input[name=type]').forEach(el=>el.addEventListener('change',populateCategories));
 $('viewAll').onclick=()=>go('transactions');$('viewBudgets').onclick=()=>go('budgets');$('newBtn').onclick=()=>modal();$('closeModal').onclick=closeModal;$('cancel').onclick=closeModal;$('modal').onclick=e=>{if(e.target.id==='modal')closeModal();};$('month').addEventListener('change',refresh);$('search').oninput=render;$('typeFilter').onchange=render;$('reloadBtn').onclick=refresh;$('backupBtn').onclick=refresh;
 $('entryForm').onsubmit=async e=>{e.preventDefault();const type=document.querySelector('input[name=type]:checked').value;const item={id:$('entryId').value||newId(),type,description:$('description').value.trim(),amount:Number($('amount').value),date:$('date').value,category:$('category').value,account:$('account').value,notes:$('notes').value,status:$('status').value};if(!item.date||!item.description||!item.category||!(item.amount>0))return notify('Preencha a data, categoria, descrição e valor positivo.');const saved=await performSave(()=>upsertEntry(item),'Lançamento salvo no Excel.');if(saved){closeModal();$('month').value=item.date.slice(0,7);await refresh();}};
 $('records').onclick=async e=>{const edit=e.target.closest('[data-edit]'),del=e.target.closest('[data-delete]');if(edit)modal(edit.dataset.edit);if(del&&confirm('Excluir definitivamente este lançamento da tabela Excel?'))await performSave(()=>deleteEntry(del.dataset.delete),'Lançamento excluído do Excel.');};
 $('saveBudget').onclick=async()=>{let changes={};for(const input of document.querySelectorAll('[data-budget]')){let v=Number(input.value);if(!Number.isFinite(v)||v<0)return notify('Limites precisam ser valores positivos ou zero.');changes[input.dataset.budget]=v;}await performSave(()=>upsertBudgets(changes),'Orçamentos gravados na tabela Excel.');};
-$('closeMonth').onclick=async()=>{const items=currentItems(),inc=sum(items,'Receita'),exp=sum(items,'Despesa'),pending=items.filter(x=>x.type==='Despesa'&&x.status==='Pendente').reduce((a,x)=>a+x.amount,0),month=currentMonth(),last=db.closings.find(x=>x.month===month);if(last&&!confirm(`Já existe fechamento de ${fmtMonth(month)}. Substituir o registro anterior pelos valores atuais?`))return;if(pending>0&&!confirm(`Há ${money(pending)} em despesas pendentes. Deseja registrar este fechamento mesmo assim?`))return;if(!confirm(`Fechar ${fmtMonth(month)}?\nReceitas: ${money(inc)}\nDespesas: ${money(exp)}\nSaldo: ${money(inc-exp)}`))return;const snapshot=[month,inc,exp,inc-exp,pending,new Date().toLocaleString('pt-BR'),'Fechamento efetuado pelo Finança Clara HTML'];await performSave(()=>upsertClosing(snapshot),'Fechamento mensal registrado no Excel.');};
+$('closeMonth').onclick=async()=>{const items=currentItems(),inc=sum(items,'Receita'),exp=sum(items,'Despesa'),pending=items.filter(x=>x.type==='Despesa'&&x.status==='Pendente').reduce((a,x)=>a+x.amount,0),month=currentMonth(),last=db.closings.find(x=>x.month===month);if(last&&!confirm(`Já existe fechamento de ${fmtMonth(month)}. Substituir o registro anterior pelos valores atuais?`))return;if(pending>0&&!confirm(`Há ${money(pending)} em despesas pendentes. Deseja registrar este fechamento mesmo assim?`))return;if(!confirm(`Fechar ${fmtMonth(month)}?\nReceitas: ${money(inc)}\nDespesas: ${money(exp)}\nSaldo: ${money(inc-exp)}`))return;const snapshot=[month,inc,exp,inc-exp,pending,new Date().toLocaleString('pt-BR'),'Fechamento efetuado pelo Controle Financeiro HTML'];await performSave(()=>upsertClosing(snapshot),'Fechamento mensal registrado no Excel.');};
 window.addEventListener('focus',()=>{if(connected && Date.now()-lastRead>3500)refresh();});
 }
-async function init(){bind();$('month').value=todayISO().slice(0,7);if(typeof Office==='undefined'){notify('Office.js não carregado. Abra o suplemento dentro do Excel, com conexão à internet.');return;}try{await Office.onReady();if(!Office.context||Office.context.host!==Office.HostType.Excel){notify('Prévia HTML: abra a interface como suplemento dentro do Excel para usar suas tabelas.');return;}connected=true;await refresh();}catch(err){console.error(err);notify('Falha ao iniciar suplemento: '+(err.message||err));}}
+async function init(){bind();$('month').value=todayISO().slice(0,7);if(typeof Office==='undefined'){notify('Office.js não carregado. Abra o suplemento dentro do Excel, com conexão à internet.');return;}try{await Office.onReady();
+  if(popupMode){
+    await new Promise((resolve,reject)=>{
+      Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived,replyFromHost,result=>{
+        if(result.status===Office.AsyncResultStatus.Succeeded)resolve();
+        else reject(new Error(result.error?.message||'Não foi possível conectar ao Excel.'));
+      });
+    });
+    connected=true;await refresh();return;
+  }
+  if(!Office.context||Office.context.host!==Office.HostType.Excel){notify('Prévia HTML: abra a interface como suplemento dentro do Excel para usar suas tabelas.');return;}connected=true;await refresh();}catch(err){console.error(err);notify('Falha ao iniciar suplemento: '+(err.message||err));}}
 init();
