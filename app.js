@@ -126,9 +126,10 @@ async function ensureRecurringTable(){
     if(sheet.isNullObject)sheet=context.workbook.worksheets.add('Recorrentes');
     const rng=sheet.getRange('A1:J2');
     rng.values=[recurringHeaders,Array(10).fill('')];
-    const t=sheet.tables.add(rng,true,TABLES.recurring);
+    const t=sheet.tables.add(rng,true);
+    t.name=TABLES.recurring;
     t.showFilterButton=true;
-    sheet.getRange('A1:J1').format.fill='#146C54';
+    sheet.getRange('A1:J1').format.fill.color='#146C54';
     sheet.getRange('A1:J1').format.font.color='#FFFFFF';
     sheet.getRange('A:A').format.columnWidth=130;
     sheet.getRange('B:C').format.columnWidth=130;
