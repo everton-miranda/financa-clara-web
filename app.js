@@ -184,6 +184,14 @@ async function refresh(){try{db=await readAll(); lastRead=Date.now();populateCat
 function go(to){screen=to;document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('on',x.id===to));document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.dataset.screen===to));const pages={overview:['Visão geral','Acompanhe seu dinheiro com clareza.'],transactions:['Lançamentos','Cadastre e edite sem sair do Excel.'],budgets:['Orçamento mensal','Planeje limites para cada categoria.'],closing:['Fechamento mensal','Revise e registre seu resultado.'],analysis:['Análise interativa','Explore despesas por categoria e por dia.'],recurring:['Receitas fixas','Cadastre salário, vale-alimentação e outras entradas mensais.']};$('pageTitle').textContent=pages[to][0];$('pageSub').textContent=pages[to][1];render();}
 function render(){const items=currentItems(),income=sum(items,'Receita'),expense=sum(items,'Despesa'),balance=income-expense,pending=items.filter(x=>x.type==='Despesa'&&x.status==='Pendente').reduce((a,x)=>a+x.amount,0);
   $('income').textContent=money(income);$('expenses').textContent=money(expense);$('balance').textContent=money(balance);$('savings').textContent=income?`${Math.round(balance/income*100)}%`:'—';$('balance').style.color=balance<0?'#ffd1be':'white';
+  const vaIncome=items.filter(x=>x.type==='Receita'&&x.category==='Vale-alimentação').reduce((n,x)=>n+x.amount,0);
+  const vaSpent=items.filter(x=>x.type==='Despesa'&&/^(cartão va|cartao va|vale alimentação|vale-alimentação)$/i.test(x.account.trim())).reduce((n,x)=>n+x.amount,0);
+  const cashBalance=(income-vaIncome)-(expense-vaSpent);
+  $('vaIncome').textContent=money(vaIncome);
+  $('vaSpent').textContent=money(vaSpent);
+  $('vaBalance').textContent=money(vaIncome-vaSpent);
+  $('cashBalance').textContent=money(cashBalance);
+  $('cashBalance').style.color=cashBalance<0?'#c44337':'#13664f';
   $('closingIncome').textContent=money(income);$('closingExpense').textContent=money(expense);$('closingBalance').textContent=money(balance);$('closingPending').textContent=money(pending);
   renderBars();renderDonut(items,expense);renderRecent(items);renderBudgets(items);renderTransactions(items);renderClosings(income,expense,pending);renderAnalysis();renderRecurring();
 }
