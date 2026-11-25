@@ -1,4 +1,4 @@
-# Controle Financeiro — Excel + HTML (versão 6)
+# Controle Financeiro — Excel + HTML (versão 6.1)
 
 Projeto de controle financeiro para Excel Microsoft 365 com interface HTML hospedada no GitHub Pages. O código público **não contém lançamentos nem valores pessoais**.
 
@@ -25,3 +25,17 @@ Projeto de controle financeiro para Excel Microsoft 365 com interface HTML hospe
 ## Custos e limites
 
 GitHub Pages não cobra para este repositório público dentro dos limites da oferta gratuita. O Excel deve estar licenciado. A interface exige internet para carregar e o Office.js se comunica com as tabelas da pasta aberta, sem enviar valores pessoais para o GitHub. O botão e os manifestos existentes permanecem com os mesmos nomes.
+
+
+## Correção 6.1 — recebimentos mensais recorrentes
+
+- A aba **Recorrentes** é criada **somente ao salvar uma regra de receita fixa**. A abertura do dashboard, mesmo em planilhas antigas, não tenta formatar ou criar tabelas.
+- O aplicativo não faz mais a operação de formatação `format.fill` que originou o erro de propriedade somente leitura. Se a criação da nova tabela falhar, outros dados permanecem intactos.
+- Ao visualizar a competência, gera um lançamento por regra ativa, identificada por `REC-<ID>-AAAA-MM`. Atualizações sucessivas do painel são serializadas para impedir duplicações.
+- **Não gera lançamentos automáticos em meses já fechados**. O histórico de fechamentos prevalece.
+- O padrão de pagamentos recorrentes é **Pendente**. A opção de considerar recebido automaticamente gera o registro como **Pago** somente na data do recebimento ou depois; ela não confirma uma entrada bancária real.
+- Regra de exemplo: Salário — R$ X — dia 15 — primeiro mês 2026-11 — sem último mês.
+- Os dados continuam no próprio Excel. Salve o arquivo após cadastrar/gerar lançamentos.
+- A versão é identificada no rodapé do aplicativo como `V6.1`.
+
+**Testes em simulador Office.js:** leitura sem tabela de recorrências, não geração em mês fechado, não criação antecipada no modo Pago automático, serialização de leituras concorrentes e não duplicação do mês. **A abertura no Excel Windows real ainda precisa ser validada pelo usuário.**
