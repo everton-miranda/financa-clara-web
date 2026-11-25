@@ -14,3 +14,45 @@
 .topactions{flex-wrap:wrap}
 @media (max-width:1000px){.closinggrid{grid-template-columns:repeat(2,minmax(0,1fr))}.historyrow{grid-template-columns:1fr 1fr;gap:8px}}
 @media (max-width:560px){.closinggrid{grid-template-columns:1fr 1fr}.closingstat{padding:12px}.closingstat strong{font-size:18px}.topactions{flex-wrap:wrap}.nav{font-size:14px;padding:8px}.sidebar nav{flex-wrap:wrap}}
+
+
+/* Controle Financeiro V6 — análise interativa e receitas fixas */
+.quickinfo{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#e9f2ee;border:1px solid #dcebe3;border-radius:12px;padding:12px 17px;margin:-8px 0 22px;color:#23614d;font-size:12px}
+.quickinfo button{background:transparent;color:#087b5d;border:0;font-weight:700;cursor:pointer}
+.analysis-head{margin-bottom:18px}
+.analysis-filters{display:flex;align-items:center;flex-wrap:wrap;gap:15px;background:#eff7f3;padding:14px;border-radius:12px;color:#3c6959}
+.analysis-filters strong{color:#107657;font-size:23px;margin-left:auto}
+.analysis-insight{background:#e4f4ed;color:#195c47;border-radius:8px;padding:12px;font-size:13px}
+.analysis-bars{display:flex;flex-direction:column;gap:8px;min-height:210px}
+.a-bar{background:#f7faf8;border:1px solid #e0e9e4;border-radius:9px;display:grid;grid-template-columns:minmax(100px,1.3fr) minmax(65px,2fr) minmax(90px,1fr);gap:12px;align-items:center;text-align:left;color:#344a42;padding:10px;font-size:12px}
+.a-bar:hover,.a-bar.selected{border-color:#117a5d;background:#e1f5eb}
+.a-bar b{text-align:right;white-space:nowrap}
+.a-track{background:#e9f0eb;height:14px;border-radius:20px;overflow:hidden}
+.a-track span{display:block;background:#149b71;height:100%;border-radius:20px}
+.analysis-days{display:flex;align-items:stretch;gap:3px;min-height:210px;overflow-x:auto;padding:12px 0}
+.a-day{display:flex;flex-direction:column;align-items:center;justify-content:end;gap:6px;flex:1;min-width:21px;border:1px solid transparent;border-radius:5px;background:transparent;padding:6px 1px 3px;color:#688176}
+.a-day:hover,.a-day.selected{background:#e3f5ed;border-color:#158764;color:#076a4d}
+.a-daybar{width:100%;border-radius:3px 3px 0 0;max-height:155px;background:#179d73;min-height:3px}
+.a-day small{font-size:9px}
+.recurring-grid{align-items:start}
+.recurring-form{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.recurring-form label{display:grid;gap:6px;color:#48645a;font-size:12px;font-weight:600}
+.recurring-form input,.recurring-form select{width:100%;border:1px solid #dbe8e1;border-radius:9px;padding:11px 12px;background:white;color:#27443a;min-width:0}
+.recurring-form .checkline{display:flex;grid-column:1/-1;align-items:center;gap:10px}
+.recurring-form .checkline input{width:auto}
+.recurring-form .formnote{grid-column:1/-1;font-size:11px;line-height:1.5;color:#698279;background:#f3f8f5;padding:12px;border-radius:9px;margin:0}
+.recurring-form .formactions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:12px}
+.recurring-list{display:flex;flex-direction:column;gap:12px}
+.recurring-item{display:flex;gap:10px;justify-content:space-between;padding:14px;border:1px solid #e6eeea;border-radius:10px;background:#fbfdfc}
+.recurring-detail{display:flex;flex-direction:column;gap:7px;min-width:0}
+.recurring-detail strong{font-size:14px}
+.recurring-detail small{color:#708b7d;font-size:11px}
+.recurring-actions{display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+.recurring-actions>div{display:flex;gap:7px}
+.recurring-actions button{font-size:11px;padding:7px 9px}
+.recurring-note{margin-top:16px;padding:13px;background:#eef6f0;border-radius:10px;color:#567866;font-size:12px;line-height:1.55}
+.catlink{border:0;cursor:pointer;background:transparent;width:100%;padding:5px 0;font:inherit;text-align:left;color:inherit}
+.catlink:hover{background:#e8f5ee}
+.barcol[data-month-link]{cursor:pointer}
+.barcol[data-month-link]:hover{background:#eef7f3;border-radius:7px}
+@media(max-width:760px){.recurring-form{grid-template-columns:1fr}.quickinfo{align-items:flex-start;flex-direction:column}.recurring-item{flex-direction:column}.recurring-actions{align-items:flex-start}.analysis-filters strong{margin-left:0}}
