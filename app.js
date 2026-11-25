@@ -1,5 +1,6 @@
-/* Controle Financeiro v4 — Office.js. Nenhum dado financeiro é enviado para servidores. */
+/* Controle Financeiro — Office.js. Nenhum dado financeiro é enviado para servidores. */
 'use strict';
+const BUILD_ID = '6.1.0';
 const $ = id => document.getElementById(id);
 const popupMode = new URLSearchParams(location.search).get('popup') === '1';
 let controleDialog = null, rpcNext = 0;
@@ -18,6 +19,7 @@ function replyFromHost(arg) {
   if(msg.kind!=='cf-rpc-result')return;
   const slot=rpcPending.get(msg.rid);if(!slot)return;
   clearTimeout(slot.timeout);rpcPending.delete(msg.rid);
+  if(msg.build!==BUILD_ID)console.warn('[Controle Financeiro] Versões diferentes no Excel e na janela.', {host:msg.build,dialog:BUILD_ID});
   if(msg.error)slot.reject(new Error(msg.error));else slot.resolve(msg.result);
 }
 async function messageFromDialog(arg) {
@@ -40,8 +42,8 @@ async function messageFromDialog(arg) {
       case 'deleteRecurring':await deleteRecurring(p.id);break;
       default:throw new Error('Operação não permitida.');
     }
-  }catch(e){error=e.message||String(e);}
-  if(controleDialog){try{controleDialog.messageChild(JSON.stringify({kind:'cf-rpc-result',rid:msg.rid,result,error}));}catch(e){console.error(e);}}
+  }catch(e){logExcelError(msg.action,e);error=e.message||String(e);}
+  if(controleDialog){try{controleDialog.messageChild(JSON.stringify({kind:'cf-rpc-result',rid:msg.rid,result,error,build:BUILD_ID}));}catch(e){logExcelError('responder ao diálogo',e);}}
 }
 let dialogOpening = false;
 function openSeparateWindow() {
@@ -55,7 +57,7 @@ function openSeparateWindow() {
   dialogOpening=true;
   return new Promise((resolve,reject)=>{
     try{
-      Office.context.ui.displayDialogAsync(location.origin+location.pathname+'?popup=1',{height:98,width:98},result=>{
+      Office.context.ui.displayDialogAsync(location.origin+location.pathname+'?popup=1&build='+encodeURIComponent(BUILD_ID),{height:98,width:98},result=>{
         dialogOpening=false;
         if(result.status!==Office.AsyncResultStatus.Succeeded){
           const error=new Error('Não foi possível abrir a janela: '+(result.error?.message||'erro desconhecido'));
@@ -90,7 +92,7 @@ const sum=(arr,type)=>arr.filter(x=>x.type===type).reduce((v,x)=>v+x.amount,0);
 const categorySpend=items=>items.filter(x=>x.type==='Despesa').reduce((acc,x)=>(acc[x.category]=(acc[x.category]||0)+x.amount,acc),{});
 const colors=['#199672','#e6a18d','#e4c875','#759cdd','#a18fd7','#7bbaa7','#d47b9c','#9ea6a0'];
 let connected=false, db={items:[],categories:[],budgets:{},closings:[],recurring:[]}, screen='overview', lastRead=0;
-let recurringTableReady=false;
+let pendingRead = Promise.resolve();
 let analysisCategory='', analysisDay=0;
 const TABLES={items:'tblLancamentos',categories:'tblCategorias',budgets:'tblOrcamentos',closings:'tblFechamentos',recurring:'tblRecorrentes'};
 const currentMonth=()=>String($('month').value||'');
@@ -115,54 +117,145 @@ function recurringDate(month,day){
   return month+'-'+String(Math.min(Math.max(1,day),last)).padStart(2,'0');
 }
 function recurringId(id,month){return 'REC-'+id+'-'+month;}
-async function ensureRecurringTable(){
-  if(recurringTableReady)return;
-  await Excel.run(async context=>{
-    const found=context.workbook.tables.getItemOrNullObject(TABLES.recurring);
-    found.load('isNullObject');await context.sync();
-    if(!found.isNullObject){recurringTableReady=true;return;}
-    let sheet=context.workbook.worksheets.getItemOrNullObject('Recorrentes');
-    sheet.load('isNullObject');await context.sync();
-    if(sheet.isNullObject)sheet=context.workbook.worksheets.add('Recorrentes');
-    const rng=sheet.getRange('A1:J2');
-    rng.values=[recurringHeaders,Array(10).fill('')];
-    const t=sheet.tables.add(rng,true);
-    t.name=TABLES.recurring;
-    t.showFilterButton=true;
-    sheet.getRange('A1:J1').format.fill.color='#146C54';
-    sheet.getRange('A1:J1').format.font.color='#FFFFFF';
-    sheet.getRange('A:A').format.columnWidth=130;
-    sheet.getRange('B:C').format.columnWidth=130;
-    sheet.getRange('D:J').format.columnWidth=110;
-    await context.sync();
-    recurringTableReady=true;
+function logExcelError(stage, error) {
+  // Não registrar valores, mensagens do Excel ou instruções da operação.
+  console.error('[Controle Financeiro]', {
+    build: BUILD_ID,
+    runtime: popupMode ? 'janela' : 'host',
+    stage,
+    name: error.name,
+    code: error.code,
+    location: error.debugInfo?.errorLocation,
+    stack: error.stack?.split('\n').filter(line => /^\s*at\s/.test(line)).join('\n')
   });
+}
+
+function hasRecurringHeaders(row) {
+  return row.length === recurringHeaders.length &&
+    row.every((value, index) => value === recurringHeaders[index]);
+}
+
+async function ensureRecurringTable() {
+  let stage = 'localizar tblRecorrentes';
+  try {
+    await Excel.run(async context => {
+      const found = context.workbook.tables.getItemOrNullObject(TABLES.recurring);
+      await context.sync();
+      if (!found.isNullObject) return;
+
+      stage = 'localizar aba Recorrentes';
+      let sheet = context.workbook.worksheets.getItemOrNullObject('Recorrentes');
+      await context.sync();
+      if (sheet.isNullObject) {
+        stage = 'worksheets.add / sync';
+        sheet = context.workbook.worksheets.add('Recorrentes');
+        await context.sync();
+      }
+
+      stage = 'inspecionar área e tabelas existentes';
+      const used = sheet.getUsedRangeOrNullObject(true);
+      const headers = sheet.getRange('A1:J1');
+      headers.load(['values', 'formulas']);
+      used.load(['columnIndex', 'columnCount', 'rowIndex', 'rowCount']);
+      sheet.tables.load('items/name');
+      await context.sync();
+
+      const row = headers.values[0];
+      const matchingHeaders = hasRecurringHeaders(row);
+      const blankHeaders = headers.formulas[0].every(value => value === '');
+      const lastRow = used.isNullObject ? 0 : used.rowIndex + used.rowCount;
+      const safeArea = used.isNullObject || used.columnIndex + used.columnCount <= recurringHeaders.length;
+
+      if (sheet.tables.items.length === 1 && matchingHeaders) {
+        const candidate = sheet.tables.items[0];
+        const range = candidate.getRange();
+        range.load(['rowIndex', 'columnIndex', 'columnCount']);
+        await context.sync();
+        if (range.rowIndex === 0 && range.columnIndex === 0 && range.columnCount === recurringHeaders.length) {
+          stage = 'recuperar nome da tabela / sync';
+          candidate.name = TABLES.recurring;
+          await context.sync();
+          return;
+        }
+      }
+      if (sheet.tables.items.length || !safeArea || (!matchingHeaders && (!blankHeaders || lastRow > 1))) {
+        throw new Error('A aba Recorrentes contém uma estrutura que precisa de revisão.');
+      }
+
+      if (!matchingHeaders) {
+        stage = 'escrever cabeçalhos / sync';
+        headers.values = [recurringHeaders];
+        await context.sync();
+      }
+      stage = 'tables.add / sync';
+      const table = sheet.tables.add(sheet.getRange('A1:J' + Math.max(2, lastRow)), true);
+      await context.sync();
+      stage = 'nomear tblRecorrentes / sync';
+      table.name = TABLES.recurring;
+      await context.sync();
+    });
+  } catch (error) {
+    logExcelError(stage, error);
+    throw error;
+  }
 }
 
 function rowsFromTable(table){const values=table.values||[],texts=table.text||[];return values.slice(1).map((row,i)=>({row,text:texts[i+1]||[]}));}
 async function readAll(monthArg=currentMonth()){
   if(popupMode)return dialogCall('readAll',{month:monthArg});
-  await ensureRecurringTable();
+  const read = pendingRead.then(() => readWorkbook(monthArg));
+  pendingRead = read.catch(() => {});
+  return read;
+}
+
+async function readWorkbook(monthArg) {
   if(!connected)throw Error('Abra este painel como suplemento dentro do Excel, na pasta de trabalho Controle Financeiro.xlsx.');
-  return Excel.run(async context=>{
+  const data = await Excel.run(async context=>{
     const ranges={};
     for(const [key,name] of Object.entries(TABLES)){
+      if (key === 'recurring') continue;
       ranges[key]=context.workbook.tables.getItem(name).getRange();
       ranges[key].load(['values','text']);
     }
     await context.sync();
-    let items=rowsFromTable(ranges.items).map(({row,text},index)=>({
+    const items=rowsFromTable(ranges.items).map(({row,text},index)=>({
       id:String(row[0]??'').trim()||`__r_${index}`,sourceIndex:index,date:isoDate(row[1],text[1]),type:String(row[2]??'').trim(),
       description:String(row[3]??'').trim(),category:String(row[4]??'').trim(),account:String(row[5]??'').trim(),
       amount:Number(row[6])||0,status:String(row[7]??'').trim()||'Pago',notes:String(row[8]??'').trim()
     })).filter(x=>x.date && (x.type==='Receita'||x.type==='Despesa') && x.amount>0);
     const categories=rowsFromTable(ranges.categories).map(({row})=>({name:String(row[0]??'').trim(),type:String(row[1]??'').trim()})).filter(x=>x.name);
     const month=monthArg;
-    const recurring=rowsFromTable(ranges.recurring).map(({row})=>parseRule(row)).filter(r=>r.id&&r.amount>0&&r.description&&r.start);
-    const existing=new Set(items.map(x=>x.id));
+    const budgets={};
+    rowsFromTable(ranges.budgets).forEach(({row})=>{if(String(row[0]??'').trim()===month)budgets[String(row[1]??'').trim()]=Number(row[2])||0;});
+    const closings=rowsFromTable(ranges.closings).map(({row})=>({month:String(row[0]??'').trim(),income:Number(row[1])||0,expense:Number(row[2])||0,balance:Number(row[3])||0,pending:Number(row[4])||0,closedAt:String(row[5]??''),notes:String(row[6]??'')})).filter(x=>x.month);
+    const entryIds = rowsFromTable(ranges.items).map(({row}) => String(row[0] ?? '').trim());
+    return {items,categories,budgets,closings,entryIds};
+  });
+
+  const {entryIds, ...result} = data;
+  result.recurring = [];
+  let stage = 'preparar tabela de receitas fixas';
+  try {
+    await ensureRecurringTable();
+    stage = 'ler tabela de receitas fixas / sync';
+    const recurring = await Excel.run(async context => {
+      const table = context.workbook.tables.getItem(TABLES.recurring);
+      const range = table.getRange();
+      range.load('values');
+      await context.sync();
+      if (!hasRecurringHeaders(range.values[0])) {
+        throw new Error('Os cabeçalhos de tblRecorrentes precisam de revisão.');
+      }
+      return rowsFromTable(range).map(({row}) => parseRule(row))
+        .filter(rule => rule.id && rule.amount > 0 && rule.description && rule.start);
+    });
+    result.recurring = recurring;
+    stage = 'gerar lançamentos recorrentes / sync';
+    const month = monthArg;
+    const existing=new Set(entryIds);
     const generated=[];
     for(const rule of recurring){
-      if(!/^\d{4}-\d{2}$/.test(month)||rule.active===false||month<rule.start||(rule.end&&month>rule.end))continue;
+      if(data.closings.some(closing => closing.month === month)||!/^\d{4}-\d{2}$/.test(month)||rule.active===false||month<rule.start||(rule.end&&month>rule.end))continue;
       const id=recurringId(rule.id,month);
       if(existing.has(id))continue;
       const date=recurringDate(month,rule.day);
@@ -171,17 +264,19 @@ async function readAll(monthArg=currentMonth()){
       generated.push(entry);existing.add(id);
     }
     if(generated.length){
-      context.workbook.tables.getItem(TABLES.items).rows.add(null,generated.map(entryRow));
-      await context.sync();
-      items=items.concat(generated);
+      await Excel.run(async context => {
+        context.workbook.tables.getItem(TABLES.items).rows.add(null,generated.map(entryRow));
+        await context.sync();
+      });
+      data.items.push(...generated);
     }
-    const budgets={};
-    rowsFromTable(ranges.budgets).forEach(({row})=>{if(String(row[0]??'').trim()===month)budgets[String(row[1]??'').trim()]=Number(row[2])||0;});
-    const closings=rowsFromTable(ranges.closings).map(({row})=>({month:String(row[0]??'').trim(),income:Number(row[1])||0,expense:Number(row[2])||0,balance:Number(row[3])||0,pending:Number(row[4])||0,closedAt:String(row[5]??''),notes:String(row[6]??'')})).filter(x=>x.month);
-    return {items,categories,budgets,closings,recurring};
-  });
+  } catch (error) {
+    logExcelError(stage, error);
+    result.recurringWarning = 'As receitas fixas não puderam ser atualizadas. Os demais dados foram carregados.';
+  }
+  return result;
 }
-async function refresh(){try{db=await readAll(); lastRead=Date.now();populateCategories();render();}catch(err){console.error(err);notify('Erro ao ler Excel: '+(err.message||err));}}
+async function refresh(){try{db=await readAll(); lastRead=Date.now();populateCategories();render();$('recurringWarning').textContent=db.recurringWarning||'';$('recurringWarning').hidden=!db.recurringWarning;}catch(err){logExcelError('ler tabelas principais',err);notify('Erro ao ler as tabelas do Excel. Confira a versão exibida e tente Atualizar.');}}
 function go(to){screen=to;document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('on',x.id===to));document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.dataset.screen===to));const pages={overview:['Visão geral','Acompanhe seu dinheiro com clareza.'],transactions:['Lançamentos','Cadastre e edite sem sair do Excel.'],budgets:['Orçamento mensal','Planeje limites para cada categoria.'],closing:['Fechamento mensal','Revise e registre seu resultado.'],analysis:['Análise interativa','Explore despesas por categoria e por dia.'],recurring:['Receitas fixas','Cadastre salário, vale-alimentação e outras entradas mensais.']};$('pageTitle').textContent=pages[to][0];$('pageSub').textContent=pages[to][1];render();}
 function render(){const items=currentItems(),income=sum(items,'Receita'),expense=sum(items,'Despesa'),balance=income-expense,pending=items.filter(x=>x.type==='Despesa'&&x.status==='Pendente').reduce((a,x)=>a+x.amount,0);
   $('income').textContent=money(income);$('expenses').textContent=money(expense);$('balance').textContent=money(balance);$('savings').textContent=income?`${Math.round(balance/income*100)}%`:'—';$('balance').style.color=balance<0?'#ffd1be':'white';
@@ -220,11 +315,12 @@ async function upsertRecurring(rule){
   await Excel.run(async context=>{
     const table=context.workbook.tables.getItem(TABLES.recurring);
     const range=table.getRange();range.load('values');await context.sync();
+    if (!hasRecurringHeaders(range.values[0])) throw new Error('Confira os cabeçalhos de tblRecorrentes.');
     const rows=range.values.slice(1);
     const idx=rows.findIndex(row=>String(row[0]||'')===rule.id);
     if(idx>=0)table.rows.getItemAt(idx).getRange().values=[ruleRow(rule)];
     else {
-      const empty=rows.findIndex(row=>!String(row[0]||'').trim());
+      const empty=rows.findIndex(row=>row.every(value => value === ''));
       if(empty>=0)table.rows.getItemAt(empty).getRange().values=[ruleRow(rule)];
       else table.rows.add(null,[ruleRow(rule)]);
     }
@@ -237,6 +333,7 @@ async function deleteRecurring(id){
   await Excel.run(async context=>{
     const table=context.workbook.tables.getItem(TABLES.recurring);
     const range=table.getRange();range.load('values');await context.sync();
+    if (!hasRecurringHeaders(range.values[0])) throw new Error('Confira os cabeçalhos de tblRecorrentes.');
     const idx=range.values.slice(1).findIndex(row=>String(row[0]||'')===id);
     if(idx<0)throw new Error('Regra não encontrada na planilha.');
     table.rows.getItemAt(idx).delete();await context.sync();
@@ -321,7 +418,10 @@ $('saveBudget').onclick=async()=>{let changes={};for(const input of document.que
 $('closeMonth').onclick=async()=>{const items=currentItems(),inc=sum(items,'Receita'),exp=sum(items,'Despesa'),pending=items.filter(x=>x.type==='Despesa'&&x.status==='Pendente').reduce((a,x)=>a+x.amount,0),month=currentMonth(),last=db.closings.find(x=>x.month===month);if(last&&!confirm(`Já existe fechamento de ${fmtMonth(month)}. Substituir o registro anterior pelos valores atuais?`))return;if(pending>0&&!confirm(`Há ${money(pending)} em despesas pendentes. Deseja registrar este fechamento mesmo assim?`))return;if(!confirm(`Fechar ${fmtMonth(month)}?\nReceitas: ${money(inc)}\nDespesas: ${money(exp)}\nSaldo: ${money(inc-exp)}`))return;const snapshot=[month,inc,exp,inc-exp,pending,new Date().toLocaleString('pt-BR'),'Fechamento efetuado pelo Controle Financeiro HTML'];await performSave(()=>upsertClosing(snapshot),'Fechamento mensal registrado no Excel.');};
 window.addEventListener('focus',()=>{if(connected && Date.now()-lastRead>3500)refresh();});
 }
-async function init(){bind();$('month').value=todayISO().slice(0,7);$('recurringStart').value=currentMonth();if(typeof Office==='undefined'){notify('Office.js não carregado. Abra o suplemento dentro do Excel, com conexão à internet.');return;}try{await Office.onReady();
+async function init(){
+  $('buildId').textContent = 'Versão ' + BUILD_ID;
+  console.info('[Controle Financeiro]', {build:BUILD_ID,runtime:popupMode?'janela':'host'});
+  bind();$('month').value=todayISO().slice(0,7);$('recurringStart').value=currentMonth();if(typeof Office==='undefined'){notify('Office.js não carregado. Abra o suplemento dentro do Excel, com conexão à internet.');return;}try{await Office.onReady();
   if(popupMode){
     await new Promise((resolve,reject)=>{
       Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived,replyFromHost,result=>{

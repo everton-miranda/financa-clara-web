@@ -25,3 +25,9 @@ Projeto de controle financeiro para Excel Microsoft 365 com interface HTML hospe
 ## Custos e limites
 
 GitHub Pages não cobra para este repositório público dentro dos limites da oferta gratuita. O Excel deve estar licenciado. A interface exige internet para carregar e o Office.js se comunica com as tabelas da pasta aberta, sem enviar valores pessoais para o GitHub. O botão e os manifestos existentes permanecem com os mesmos nomes.
+
+## Diagnóstico da versão no Excel
+
+Quando a versão candidata estiver disponível no ambiente de teste ou no Pages, confira o número abaixo do título da interface. Para tentar atualizar o código, dê foco ao **Painel lateral** e pressione **Ctrl+F5**. Se necessário, abra **Arquivo → Opções → Central de Confiabilidade → Configurações da Central de Confiabilidade → Catálogos de Suplementos Confiáveis** e marque a opção de limpar o cache dos suplementos Web na próxima inicialização. Salve o trabalho e reinicie o Excel. Essa opção limpa o cache de suplementos do Office. [Microsoft Learn](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/clear-cache)
+
+Os passos de validação da versão candidata e de reversão estão no [handover técnico](HANDOVER.md).
