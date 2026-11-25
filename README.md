@@ -1,19 +1,27 @@
-# Finança Clara — interface HTML para Excel
+# Controle Financeiro — Excel + HTML (versão 6)
 
-Site estático para o suplemento Office.js. **Não envie dados financeiros ou o arquivo `.xlsx` a este repositório público.**
+Projeto de controle financeiro para Excel Microsoft 365 com interface HTML hospedada no GitHub Pages. O código público **não contém lançamentos nem valores pessoais**.
 
-- Interface: https://everton-miranda.github.io/financa-clara-web/
-- Manifesto do painel incorporado: [FinancaClara-PAINEL.xml](./FinancaClara-PAINEL.xml)
-- Manifesto do painel lateral: [FinancaClara-LATERAL.xml](./FinancaClara-LATERAL.xml)
+- Aplicativo: https://everton-miranda.github.io/financa-clara-web/
+- Suplemento com botão no Excel: [Controle-Financeiro-BOTAO-EXCEL.xml](./Controle-Financeiro-BOTAO-EXCEL.xml)
+- As abas `Lancamentos`, `Orcamentos`, `Categorias` e `Fechamentos` continuam no arquivo Excel do usuário. **Não substitua sua planilha por uma versão em branco se já tiver dados.**
 
-## Ativar o GitHub Pages
+## Novidades da versão 6
 
-Em **Settings → Pages**, escolha **Deploy from a branch**, selecione **main** e **/(root)** e pressione **Save**.
+- **Receitas fixas:** menu "Receitas fixas" para cadastrar salário, vale-alimentação e outras entradas, com valor, dia, conta/cartão, mês inicial/final e opção de marcar automaticamente como recebido na data. A alternativa segura é manter **Pendente** até conferir o crédito. O saldo em dinheiro é exibido separado do saldo de VA. Não há consulta bancária.
+- **Excel automático:** ao usar o menu, o aplicativo cria a aba `Recorrentes` e a tabela `tblRecorrentes` no próprio arquivo, se ainda não existirem. Não exige uma planilha substituta, e permite editar essas regras diretamente no Excel. A receita de cada mês é gerada ao abrir aquela competência, com ID estável para evitar duplicação. Alterações manuais em lançamentos já criados são preservadas. **Exclusão manual de um lançamento recorrente pode fazer com que ele seja recriado ao atualizar o mês; para interromper a geração, exclua ou encerre a regra em Receitas fixas.** Salve a pasta de trabalho no Excel para persistir as alterações.
+- **Análise interativa:** menu "Análise interativa", categoria → dia → lista detalhada. No gráfico de fluxo, clique em um mês. Na legenda do gráfico de categorias, clique no nome para filtrar. Os filtros estão vinculados dentro da interface. Não é Power BI, mas oferece navegação similar em análises básicas.
+- **Janela HTML maior:** o botão do suplemento abre uma janela a 98% da tela. O título da janela, o endereço do site e os controles nativos são determinados pelo Office; o site não pode esconder o endereço nem inserir botões nativos de minimizar/maximizar.
 
-## Instalar no Excel
+## Uso
 
-Use **Inserir → Meus Suplementos → Carregar meu suplemento** (se disponível) e selecione o manifesto do painel. Se a opção não aparecer, utilize um catálogo compartilhado confiável autorizado pelo Windows/Office. A interface só acessa a pasta de trabalho quando carregada dentro do Excel.
+1. Continue abrindo seu arquivo Excel atual.
+2. Na faixa de opções, clique em **Abrir Controle Financeiro**.
+3. Na janela HTML, acesse **Receitas fixas**, cadastre suas regras e salve. A nova aba `Recorrentes` aparecerá no Excel.
+4. Para registrar compras com vale, escolha **Cartão VA** como conta/meio de pagamento.
+5. Entre em **Análise interativa** para escolher categoria, dia e ver os lançamentos correspondentes.
+6. Salve seu Excel regularmente. Não publique sua pasta de trabalho com dados neste repositório público.
 
-A pasta de trabalho deve ter as tabelas `tblLancamentos`, `tblCategorias`, `tblOrcamentos` e `tblFechamentos`. Use a planilha corrigida fornecida separadamente pelo ChatGPT.
+## Custos e limites
 
-O GitHub Pages hospeda somente os arquivos HTML, CSS, JavaScript e ícones públicos. Nenhum arquivo de dados pessoais é publicado aqui.
+GitHub Pages não cobra para este repositório público dentro dos limites da oferta gratuita. O Excel deve estar licenciado. A interface exige internet para carregar e o Office.js se comunica com as tabelas da pasta aberta, sem enviar valores pessoais para o GitHub. O botão e os manifestos existentes permanecem com os mesmos nomes.
