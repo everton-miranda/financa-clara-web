@@ -39,3 +39,8 @@ GitHub Pages não cobra para este repositório público dentro dos limites da of
 - A versão é identificada no rodapé do aplicativo como `V6.1`.
 
 **Testes em simulador Office.js:** leitura sem tabela de recorrências, não geração em mês fechado, não criação antecipada no modo Pago automático, serialização de leituras concorrentes e não duplicação do mês. **A abertura no Excel Windows real ainda precisa ser validada pelo usuário.**
+
+
+## Atualização 6.2 — Contas, cartões e benefícios
+
+Os campos **Conta ou cartão**, na tela **Receitas fixas**, e **Conta ou meio de pagamento**, nos lançamentos, agora são listas suspensas organizadas em *Dinheiro e contas*, *Cartões*, *Benefícios* e *Outros*. O salário sugere **Conta bancária** e o vale-alimentação sugere **Vale-alimentação**. Vale-presente fica identificado separadamente do dinheiro disponível. Valores anteriores do Excel que não estejam na lista continuam disponíveis durante a edição, para não alterar dados existentes. Não é necessário modificar o arquivo Excel nem o manifesto XML.

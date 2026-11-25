@@ -1,4 +1,4 @@
-/* Controle Financeiro v6.1 — Office.js. Nenhum dado financeiro é enviado para servidores. */
+/* Controle Financeiro v6.2 — Office.js. Nenhum dado financeiro é enviado para servidores. */
 'use strict';
 const $ = id => document.getElementById(id);
 const popupMode = new URLSearchParams(location.search).get('popup') === '1';
@@ -94,6 +94,25 @@ let recurringTableReady=false;
 let analysisCategory='', analysisDay=0;
 const TABLES={items:'tblLancamentos',categories:'tblCategorias',budgets:'tblOrcamentos',closings:'tblFechamentos',recurring:'tblRecorrentes'};
 const currentMonth=()=>String($('month').value||'');
+
+function setAccountSelection(id,value){
+  const select=$(id),name=String(value??'').trim();
+  const choice=name||'Conta bancária';
+  if(!Array.from(select.options).some(o=>o.value===choice)){
+    let legacy=select.querySelector('optgroup[data-legacy="true"]');
+    if(!legacy){legacy=document.createElement('optgroup');legacy.label='Valores existentes no Excel';legacy.dataset.legacy='true';select.appendChild(legacy);}
+    const option=document.createElement('option');option.value=choice;option.textContent=choice;legacy.appendChild(option);
+  }
+  select.value=choice;
+}
+function normalizePaymentType(value){
+  const v=String(value||'').trim().toLocaleLowerCase('pt-BR');
+  if(['cartão va','cartao va','vale alimentação','vale-alimentação'].includes(v))return 'Vale-alimentação';
+  if(['vale presente','vale-presente'].includes(v))return 'Vale-presente';
+  return String(value||'').trim();
+}
+function isBenefitAccount(account){return ['Vale-alimentação','Vale-presente'].includes(normalizePaymentType(account));}
+
 const currentItems=()=>db.items.filter(x=>monthKey(x)===currentMonth());
 function notify(msg){$('toast').textContent=msg;$('toast').classList.add('show');clearTimeout(notify.timeout);notify.timeout=setTimeout(()=>$('toast').classList.remove('show'),5000);}
 
@@ -223,7 +242,7 @@ async function readAll(monthArg=currentMonth()){
         if(rule.autoPaid && date>todayISO())continue;
         generated.push({
           id,date,type:'Receita',description:rule.description,category:rule.kind,
-          account:rule.account||(rule.kind==='Vale-alimentação'?'Cartão VA':'Conta principal'),
+          account:rule.account||(rule.kind==='Vale-alimentação'?'Vale-alimentação':'Conta bancária'),
           amount:rule.amount,status:rule.autoPaid?'Pago':'Pendente',
           notes:'Gerado por regra de receita fixa ('+rule.kind+').'
         });
@@ -246,9 +265,11 @@ async function refresh(){try{db=await readAll(); lastRead=Date.now();populateCat
 function go(to){screen=to;document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('on',x.id===to));document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.dataset.screen===to));const pages={overview:['Visão geral','Acompanhe seu dinheiro com clareza.'],transactions:['Lançamentos','Cadastre e edite sem sair do Excel.'],budgets:['Orçamento mensal','Planeje limites para cada categoria.'],closing:['Fechamento mensal','Revise e registre seu resultado.'],analysis:['Análise interativa','Explore despesas por categoria e por dia.'],recurring:['Receitas fixas','Cadastre salário, vale-alimentação e outras entradas mensais.']};$('pageTitle').textContent=pages[to][0];$('pageSub').textContent=pages[to][1];render();}
 function render(){const items=currentItems(),income=sum(items,'Receita'),expense=sum(items,'Despesa'),balance=income-expense,pending=items.filter(x=>x.type==='Despesa'&&x.status==='Pendente').reduce((a,x)=>a+x.amount,0);
   $('income').textContent=money(income);$('expenses').textContent=money(expense);$('balance').textContent=money(balance);$('savings').textContent=income?`${Math.round(balance/income*100)}%`:'—';$('balance').style.color=balance<0?'#ffd1be':'white';
-  const vaIncome=items.filter(x=>x.type==='Receita'&&x.category==='Vale-alimentação').reduce((n,x)=>n+x.amount,0);
-  const vaSpent=items.filter(x=>x.type==='Despesa'&&/^(cartão va|cartao va|vale alimentação|vale-alimentação)$/i.test(x.account.trim())).reduce((n,x)=>n+x.amount,0);
-  const cashBalance=(income-vaIncome)-(expense-vaSpent);
+  const vaIncome=items.filter(x=>x.type==='Receita'&&(x.category==='Vale-alimentação'||normalizePaymentType(x.account)==='Vale-alimentação')).reduce((n,x)=>n+x.amount,0);
+  const vaSpent=items.filter(x=>x.type==='Despesa'&&normalizePaymentType(x.account)==='Vale-alimentação').reduce((n,x)=>n+x.amount,0);
+  const benefitIncome=items.filter(x=>x.type==='Receita'&&(x.category==='Vale-alimentação'||isBenefitAccount(x.account))).reduce((n,x)=>n+x.amount,0);
+  const benefitSpent=items.filter(x=>x.type==='Despesa'&&isBenefitAccount(x.account)).reduce((n,x)=>n+x.amount,0);
+  const cashBalance=(income-benefitIncome)-(expense-benefitSpent);
   $('vaIncome').textContent=money(vaIncome);
   $('vaSpent').textContent=money(vaSpent);
   $('vaBalance').textContent=money(vaIncome-vaSpent);
@@ -266,7 +287,7 @@ function renderBudgets(items){const spending=categorySpend(items),cats=db.catego
 function renderTransactions(items){const search=$('search').value.toLowerCase(),type=$('typeFilter').value;const rows=items.filter(x=>(!type||x.type===type)&&`${x.description} ${x.category} ${x.account}`.toLowerCase().includes(search)).sort((a,b)=>b.date.localeCompare(a.date));$('records').innerHTML=rows.length?rows.map(a=>`<tr><td>${fmtDate(a.date)}</td><td><b>${safe(a.description)}</b></td><td>${safe(a.category)}</td><td>${safe(a.account)}</td><td class="txamount ${a.type==='Receita'?'credit':'debit'}">${a.type==='Receita'?'+':'−'} ${money(a.amount)}</td><td>${safe(a.status)}</td><td><button data-edit="${safe(a.id)}">Editar</button><button class="delete" data-delete="${safe(a.id)}">Excluir</button></td></tr>`).join(''):'<tr><td colspan="7" class="empty">Nenhum lançamento para esta competência.</td></tr>';}
 function renderClosings(income,expense,pending){const m=currentMonth(),last=db.closings.find(x=>x.month===m),diff=last&&(Math.abs(last.income-income)>0.01||Math.abs(last.expense-expense)>0.01||Math.abs(last.pending-pending)>0.01);const status=$('closingStatus');status.classList.toggle('warn',!!diff || pending>0);if(!last){status.textContent=pending>0?`Este mês ainda não foi fechado. Há ${money(pending)} em despesas pendentes.`:'Este mês ainda não foi fechado. Os totais estão prontos para conferência.';}else if(diff){status.textContent=`Atenção: ${fmtMonth(m)} já foi fechado em ${last.closedAt}, mas os lançamentos mudaram depois. Confira e registre um novo fechamento se necessário.`;}else{status.textContent=`Competência ${fmtMonth(m)} fechada em ${last.closedAt}. Os totais conferem com o Excel.`;}const rows=[...db.closings].sort((a,b)=>b.month.localeCompare(a.month)).slice(0,14);$('closingHistory').innerHTML=rows.length?rows.map(x=>`<div class="historyrow"><div><strong>${fmtMonth(x.month)}</strong><small>${safe(x.closedAt)}</small></div><div>Receitas <b>${money(x.income)}</b></div><div>Despesas <b>${money(x.expense)}</b></div><div>Saldo <b>${money(x.balance)}</b></div><div>Pendente <b>${money(x.pending)}</b></div></div>`).join(''):'<p class="empty">Nenhum mês foi fechado ainda.</p>';}
 function populateCategories(){const type=document.querySelector('input[name=type]:checked').value,prior=$('category').value,cats=db.categories.filter(x=>x.type===type).map(x=>x.name);$('category').innerHTML=cats.map(c=>`<option value="${safe(c)}">${safe(c)}</option>`).join('');if(cats.includes(prior))$('category').value=prior;}
-function modal(id){$('entryForm').reset();$('entryId').value='';$('date').value=todayISO();$('modalTitle').textContent='Novo lançamento';if(id){const row=db.items.find(x=>x.id===id);if(!row)return notify('Lançamento não encontrado. Atualize o painel.');$('entryId').value=row.id;$('modalTitle').textContent='Editar lançamento';document.querySelector(`input[name=type][value="${row.type}"]`).checked=true;populateCategories();for(const k of ['description','amount','date','category','account','notes'])$(k).value=row[k]??'';$('status').value=row.status||'Pago';}else{populateCategories();}$('modal').classList.add('show');$('description').focus();}
+function modal(id){$('entryForm').reset();$('entryId').value='';$('date').value=todayISO();$('modalTitle').textContent='Novo lançamento';if(id){const row=db.items.find(x=>x.id===id);if(!row)return notify('Lançamento não encontrado. Atualize o painel.');$('entryId').value=row.id;$('modalTitle').textContent='Editar lançamento';document.querySelector(`input[name=type][value="${row.type}"]`).checked=true;populateCategories();for(const k of ['description','amount','date','category','notes'])$(k).value=row[k]??'';setAccountSelection('account',row.account);$('status').value=row.status||'Pago';}else{populateCategories();}$('modal').classList.add('show');$('description').focus();}
 function closeModal(){$('modal').classList.remove('show');}
 function entryRow(x){return [xlsSafe(x.id),excelDate(x.date),x.type,xlsSafe(x.description),xlsSafe(x.category),xlsSafe(x.account),Number(x.amount),x.status,xlsSafe(x.notes)];}
 function newId(){return 'FC-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);}
@@ -308,13 +329,13 @@ function renderRecurring(){
   const sorted=[...(db.recurring||[])].sort((a,b)=>a.kind.localeCompare(b.kind));
   root.innerHTML=sorted.length?sorted.map(r=>{
     const day=String(r.day).padStart(2,'0'),range=fmtMonth(r.start)+(r.end?' até '+fmtMonth(r.end):' em diante');
-    return '<div class="recurring-item"><div class="recurring-detail"><strong>'+safe(r.description)+'</strong><small>'+safe(r.kind)+' · dia '+safe(day)+' · '+safe(range)+'</small><small>'+safe(r.account||'Conta principal')+' · '+(r.autoPaid?'Recebido na data prevista':'Pendente até confirmação')+'</small></div><div class="recurring-actions"><b>'+money(r.amount)+'</b><div><button data-recur-edit="'+safe(r.id)+'" class="secondary">Editar</button><button data-recur-del="'+safe(r.id)+'" class="secondary">Excluir</button></div></div></div>';
+    return '<div class="recurring-item"><div class="recurring-detail"><strong>'+safe(r.description)+'</strong><small>'+safe(r.kind)+' · dia '+safe(day)+' · '+safe(range)+'</small><small>'+safe(r.account||'Conta bancária')+' · '+(r.autoPaid?'Recebido na data prevista':'Pendente até confirmação')+'</small></div><div class="recurring-actions"><b>'+money(r.amount)+'</b><div><button data-recur-edit="'+safe(r.id)+'" class="secondary">Editar</button><button data-recur-del="'+safe(r.id)+'" class="secondary">Excluir</button></div></div></div>';
   }).join(''):'<p class="empty">Cadastre seu salário ou vale-alimentação para começar.</p>';
   if($('receiptInfo'))$('receiptInfo').textContent=(db.recurring||[]).length+' receita(s) fixa(s) configurada(s) · uma entrada mensal por regra.';
 }
 function resetRecurringForm(){
   $('recurringForm').reset();$('recurringId').value='';$('recurringStart').value=currentMonth();
-  $('recurringKind').value='Salário';$('recurringDay').value='5';
+  $('recurringKind').value='Salário';$('recurringDay').value='5';setAccountSelection('recurringAccount','Conta bancária');
 }
 function editRecurring(id){
   const r=(db.recurring||[]).find(x=>x.id===id);if(!r)return;
@@ -323,7 +344,7 @@ function editRecurring(id){
   $('recurringDescription').value=r.description;
   $('recurringAmount').value=r.amount;
   $('recurringDay').value=r.day;
-  $('recurringAccount').value=r.account;
+  setAccountSelection('recurringAccount',r.account||(r.kind==='Vale-alimentação'?'Vale-alimentação':'Conta bancária'));
   $('recurringStart').value=r.start;
   $('recurringEnd').value=r.end||'';
   $('recurringAutoPaid').checked=r.autoPaid;
@@ -365,6 +386,12 @@ function renderAnalysis(){
 async function performSave(fn,ok){if(!connected){notify('Abra o painel pelo Excel antes de salvar dados.');return false;}try{await fn();await refresh();notify(ok);return true;}catch(err){console.error(err);notify('Não foi possível salvar: '+(err.message||err));return false;}}
 function bind(){if($('openWindow')){if(popupMode)$('openWindow').style.display='none';else $('openWindow').onclick=openSeparateWindow;}document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>go(b.dataset.screen)));document.querySelectorAll('input[name=type]').forEach(el=>el.addEventListener('change',populateCategories));
 $('configureRecurring').onclick=()=>go('recurring');
+$('recurringKind').addEventListener('change',()=>{
+  const account=$('recurringAccount');
+  if(['Conta bancária','Vale-alimentação',''].includes(account.value)){
+    setAccountSelection('recurringAccount',$('recurringKind').value==='Vale-alimentação'?'Vale-alimentação':'Conta bancária');
+  }
+});
 $('recurringCancel').onclick=resetRecurringForm;
 $('recurringForm').onsubmit=async e=>{e.preventDefault();const rule={id:$('recurringId').value||('R-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)),kind:$('recurringKind').value,description:$('recurringDescription').value.trim(),amount:Number($('recurringAmount').value),day:Number($('recurringDay').value),account:$('recurringAccount').value.trim(),start:$('recurringStart').value,end:$('recurringEnd').value,autoPaid:$('recurringAutoPaid').checked,active:true};
   if(!rule.description||!(rule.amount>0)||rule.day<1||rule.day>31||!/^\d{4}-\d{2}$/.test(rule.start)||(rule.end&&rule.end<rule.start))return notify('Confira a descrição, valor, dia e período.');
