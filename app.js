@@ -1,4 +1,4 @@
-/* Controle Financeiro v4 — Office.js. Nenhum dado financeiro é enviado para servidores. */
+/* Controle Financeiro v6.1 — Office.js. Nenhum dado financeiro é enviado para servidores. */
 'use strict';
 const $ = id => document.getElementById(id);
 const popupMode = new URLSearchParams(location.search).get('popup') === '1';
@@ -115,72 +115,133 @@ function recurringDate(month,day){
   return month+'-'+String(Math.min(Math.max(1,day),last)).padStart(2,'0');
 }
 function recurringId(id,month){return 'REC-'+id+'-'+month;}
+// Uma tabela de recorrências só é criada quando o usuário SALVA uma regra.
+// A leitura normal do dashboard nunca deve modificar o arquivo se a tabela não existir.
 async function ensureRecurringTable(){
   if(recurringTableReady)return;
   await Excel.run(async context=>{
-    const found=context.workbook.tables.getItemOrNullObject(TABLES.recurring);
-    found.load('isNullObject');await context.sync();
-    if(!found.isNullObject){recurringTableReady=true;return;}
+    const table=context.workbook.tables.getItemOrNullObject(TABLES.recurring);
+    table.load('isNullObject');
+    await context.sync();
+    if(!table.isNullObject){recurringTableReady=true;return;}
     let sheet=context.workbook.worksheets.getItemOrNullObject('Recorrentes');
-    sheet.load('isNullObject');await context.sync();
-    if(sheet.isNullObject)sheet=context.workbook.worksheets.add('Recorrentes');
-    const rng=sheet.getRange('A1:J2');
-    rng.values=[recurringHeaders,Array(10).fill('')];
-    const t=sheet.tables.add(rng,true);
-    t.name=TABLES.recurring;
-    t.showFilterButton=true;
-    sheet.getRange('A1:J1').format.fill.color='#146C54';
-    sheet.getRange('A1:J1').format.font.color='#FFFFFF';
-    sheet.getRange('A:A').format.columnWidth=130;
-    sheet.getRange('B:C').format.columnWidth=130;
-    sheet.getRange('D:J').format.columnWidth=110;
+    sheet.load('isNullObject');
+    await context.sync();
+    if(sheet.isNullObject){
+      sheet=context.workbook.worksheets.add('Recorrentes');
+      sheet.getRange('A1:J2').values=[recurringHeaders,Array(10).fill('')];
+    }else{
+      const header=sheet.getRange('A1:J1');
+      header.load('values');
+      const existing=sheet.tables;
+      existing.load('items/name');
+      await context.sync();
+      const currentHeader=header.values[0].map(x=>String(x??'').trim());
+      const validHeader=recurringHeaders.every((x,i)=>x===currentHeader[i]);
+      if(existing.items.length){
+        if(existing.items.length===1&&validHeader){
+          // Migração não destrutiva de tabela já existente com nome automático.
+          existing.items[0].name=TABLES.recurring;
+          await context.sync();
+          recurringTableReady=true;return;
+        }
+        throw Error('A aba Recorrentes já contém outra tabela. Verifique-a antes de salvar.');
+      }
+      if(currentHeader.some(Boolean) && !validHeader){
+        throw Error('A aba Recorrentes contém dados diferentes. Não foram sobrescritos.');
+      }
+      if(!validHeader)sheet.getRange('A1:J2').values=[recurringHeaders,Array(10).fill('')];
+    }
+    const created=sheet.tables.add('A1:J2',true);
+    created.name=TABLES.recurring;
+    // Nenhuma formatação aqui: não bloquear dados por incompatibilidade visual do Office.js.
     await context.sync();
     recurringTableReady=true;
   });
 }
 
 function rowsFromTable(table){const values=table.values||[],texts=table.text||[];return values.slice(1).map((row,i)=>({row,text:texts[i+1]||[]}));}
+// Leituras seriadas para evitar que dois refreshes tentem criar o mesmo salário.
+let readQueue=Promise.resolve();
 async function readAll(monthArg=currentMonth()){
   if(popupMode)return dialogCall('readAll',{month:monthArg});
-  await ensureRecurringTable();
-  if(!connected)throw Error('Abra este painel como suplemento dentro do Excel, na pasta de trabalho Controle Financeiro.xlsx.');
-  return Excel.run(async context=>{
+  if(!connected)throw Error('Abra o Controle Financeiro como suplemento dentro do Excel.');
+  const operation=()=>Excel.run(async context=>{
     const ranges={};
     for(const [key,name] of Object.entries(TABLES)){
+      if(key==='recurring')continue;
       ranges[key]=context.workbook.tables.getItem(name).getRange();
       ranges[key].load(['values','text']);
     }
+    const maybeRecurring=context.workbook.tables.getItemOrNullObject(TABLES.recurring);
+    maybeRecurring.load('isNullObject');
     await context.sync();
-    let items=rowsFromTable(ranges.items).map(({row,text},index)=>({
-      id:String(row[0]??'').trim()||`__r_${index}`,sourceIndex:index,date:isoDate(row[1],text[1]),type:String(row[2]??'').trim(),
-      description:String(row[3]??'').trim(),category:String(row[4]??'').trim(),account:String(row[5]??'').trim(),
-      amount:Number(row[6])||0,status:String(row[7]??'').trim()||'Pago',notes:String(row[8]??'').trim()
-    })).filter(x=>x.date && (x.type==='Receita'||x.type==='Despesa') && x.amount>0);
-    const categories=rowsFromTable(ranges.categories).map(({row})=>({name:String(row[0]??'').trim(),type:String(row[1]??'').trim()})).filter(x=>x.name);
-    const month=monthArg;
-    const recurring=rowsFromTable(ranges.recurring).map(({row})=>parseRule(row)).filter(r=>r.id&&r.amount>0&&r.description&&r.start);
-    const existing=new Set(items.map(x=>x.id));
-    const generated=[];
-    for(const rule of recurring){
-      if(!/^\d{4}-\d{2}$/.test(month)||rule.active===false||month<rule.start||(rule.end&&month>rule.end))continue;
-      const id=recurringId(rule.id,month);
-      if(existing.has(id))continue;
-      const date=recurringDate(month,rule.day);
-      const kind=rule.kind;
-      const entry={id,date,type:'Receita',description:rule.description,category:kind,account:rule.account||(kind==='Vale-alimentação'?'Cartão VA':'Conta principal'),amount:rule.amount,status:rule.autoPaid&&date<=todayISO()?'Pago':'Pendente',notes:'Gerado automaticamente por receita fixa · '+kind};
-      generated.push(entry);existing.add(id);
-    }
-    if(generated.length){
-      context.workbook.tables.getItem(TABLES.items).rows.add(null,generated.map(entryRow));
+    if(!maybeRecurring.isNullObject){
+      ranges.recurring=maybeRecurring.getRange();
+      ranges.recurring.load(['values','text']);
       await context.sync();
-      items=items.concat(generated);
     }
+    let items=rowsFromTable(ranges.items).map(({row,text},index)=>({
+      id:String(row[0]??'').trim()||`__r_${index}`,sourceIndex:index,date:isoDate(row[1],text[1]),
+      type:String(row[2]??'').trim(),description:String(row[3]??'').trim(),
+      category:String(row[4]??'').trim(),account:String(row[5]??'').trim(),
+      amount:Number(row[6])||0,status:String(row[7]??'').trim()||'Pago',
+      notes:String(row[8]??'').trim()
+    })).filter(x=>x.date && (x.type==='Receita'||x.type==='Despesa') && x.amount>0);
+    const categories=rowsFromTable(ranges.categories).map(({row})=>({
+      name:String(row[0]??'').trim(),type:String(row[1]??'').trim()
+    })).filter(x=>x.name);
+    const recurring=ranges.recurring?rowsFromTable(ranges.recurring).map(({row})=>parseRule(row))
+      .filter(r=>r.id&&r.amount>0&&r.description&&/^\d{4}-\d{2}$/.test(r.start)):[];
+    // Tipos de receitas fixas também ficam disponíveis no editor HTML sem alterar a aba Categorias.
+    for(const kind of ['Salário','Vale-alimentação','Outra receita']){
+      if(!categories.some(x=>x.name===kind && x.type==='Receita'))categories.push({name:kind,type:'Receita'});
+    }
+    const month=String(monthArg||'');
     const budgets={};
-    rowsFromTable(ranges.budgets).forEach(({row})=>{if(String(row[0]??'').trim()===month)budgets[String(row[1]??'').trim()]=Number(row[2])||0;});
-    const closings=rowsFromTable(ranges.closings).map(({row})=>({month:String(row[0]??'').trim(),income:Number(row[1])||0,expense:Number(row[2])||0,balance:Number(row[3])||0,pending:Number(row[4])||0,closedAt:String(row[5]??''),notes:String(row[6]??'')})).filter(x=>x.month);
+    rowsFromTable(ranges.budgets).forEach(({row})=>{
+      if(String(row[0]??'').trim()===month)
+        budgets[String(row[1]??'').trim()]=Number(row[2])||0;
+    });
+    const closings=rowsFromTable(ranges.closings).map(({row})=>({
+      month:String(row[0]??'').trim(),income:Number(row[1])||0,
+      expense:Number(row[2])||0,balance:Number(row[3])||0,
+      pending:Number(row[4])||0,closedAt:String(row[5]??''),
+      notes:String(row[6]??'')
+    })).filter(x=>x.month);
+    // Não criar receitas automaticamente em meses que já foram fechados.
+    if(/^\d{4}-\d{2}$/.test(month) && !closings.some(x=>x.month===month)){
+      const existing=new Set(items.map(x=>x.id));
+      const generated=[];
+      for(const rule of recurring){
+        if(rule.active===false || month<rule.start || (rule.end&&month>rule.end))continue;
+        const id=recurringId(rule.id,month);
+        if(existing.has(id))continue;
+        const date=recurringDate(month,rule.day);
+        // AutoPago só gera receita como paga na data ou depois. Antes disso, não
+        // registrar uma confirmação fictícia que precisaria ser reescrita.
+        if(rule.autoPaid && date>todayISO())continue;
+        generated.push({
+          id,date,type:'Receita',description:rule.description,category:rule.kind,
+          account:rule.account||(rule.kind==='Vale-alimentação'?'Cartão VA':'Conta principal'),
+          amount:rule.amount,status:rule.autoPaid?'Pago':'Pendente',
+          notes:'Gerado por regra de receita fixa ('+rule.kind+').'
+        });
+        existing.add(id);
+      }
+      if(generated.length){
+        context.workbook.tables.getItem(TABLES.items).rows.add(null,generated.map(entryRow));
+        await context.sync();
+        items=items.concat(generated);
+      }
+    }
     return {items,categories,budgets,closings,recurring};
   });
+  const answer=readQueue.then(operation,operation);
+  readQueue=answer.then(()=>{},()=>{});
+  return answer;
 }
+
 async function refresh(){try{db=await readAll(); lastRead=Date.now();populateCategories();render();}catch(err){console.error(err);notify('Erro ao ler Excel: '+(err.message||err));}}
 function go(to){screen=to;document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('on',x.id===to));document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.dataset.screen===to));const pages={overview:['Visão geral','Acompanhe seu dinheiro com clareza.'],transactions:['Lançamentos','Cadastre e edite sem sair do Excel.'],budgets:['Orçamento mensal','Planeje limites para cada categoria.'],closing:['Fechamento mensal','Revise e registre seu resultado.'],analysis:['Análise interativa','Explore despesas por categoria e por dia.'],recurring:['Receitas fixas','Cadastre salário, vale-alimentação e outras entradas mensais.']};$('pageTitle').textContent=pages[to][0];$('pageSub').textContent=pages[to][1];render();}
 function render(){const items=currentItems(),income=sum(items,'Receita'),expense=sum(items,'Despesa'),balance=income-expense,pending=items.filter(x=>x.type==='Despesa'&&x.status==='Pendente').reduce((a,x)=>a+x.amount,0);
