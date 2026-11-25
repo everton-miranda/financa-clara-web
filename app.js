@@ -1,6 +1,6 @@
 /* Controle Financeiro — Office.js. Nenhum dado financeiro é enviado para servidores. */
 'use strict';
-const BUILD_ID = '6.2.0';
+const BUILD_ID = '6.3.0';
 const $ = id => document.getElementById(id);
 const popupMode = new URLSearchParams(location.search).get('popup') === '1';
 let controleDialog = null, rpcNext = 0;
@@ -283,7 +283,10 @@ async function readWorkbook(monthArg) {
   return result;
 }
 async function refresh(){try{db=await readAll(); planningReady=Boolean(db.planning); planning=db.planning||emptyPlanning; lastRead=Date.now();populateCategories();render();$('recurringWarning').textContent=db.recurringWarning||'';$('recurringWarning').hidden=!db.recurringWarning;}catch(err){logExcelError('ler tabelas principais',err);notify('Erro ao ler as tabelas do Excel. Confira a versão exibida e tente Atualizar.');}}
-function go(to){screen=to;document.body.dataset.screen=to;document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('on',x.id===to));document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('active',x.dataset.screen===to));const pages={bills:['Despesas fixas','Escolha o valor e registre o pagamento.'],reserve:['Reserva e imóvel','Acompanhe seus aportes e planeje a entrada.'],overview:['Visão geral','Acompanhe seu dinheiro com clareza.'],transactions:['Lançamentos','Cadastre e edite sem sair do Excel.'],budgets:['Orçamento mensal','Planeje limites para cada categoria.'],closing:['Fechamento mensal','Revise e registre seu resultado.'],analysis:['Análise interativa','Explore despesas por categoria e por dia.'],recurring:['Receitas fixas','Cadastre salário, vale-alimentação e outras entradas mensais.']};$('pageTitle').textContent=pages[to][0];$('pageSub').textContent=pages[to][1];render();}
+function go(to){screen=to;document.body.dataset.screen=to;document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('on',x.id===to));document.querySelectorAll('.top-nav [data-quick]').forEach(button => {
+  if (button.dataset.quick === to) button.setAttribute('aria-current', 'page');
+  else button.removeAttribute('aria-current');
+});window.scrollTo(0,0);const pages={bills:['Despesas fixas','Escolha o valor e registre o pagamento.'],reserve:['Reserva e imóvel','Acompanhe seus aportes e planeje a entrada.'],overview:['Visão geral','Veja o mês e escolha o que quer fazer.'],transactions:['Lançamentos','Cadastre e edite sem sair do Excel.'],budgets:['Orçamento mensal','Planeje limites para cada categoria.'],closing:['Fechamento mensal','Revise e registre seu resultado.'],analysis:['Análise interativa','Explore despesas por categoria e por dia.'],recurring:['Receitas fixas','Cadastre salário, vale-alimentação e outras entradas mensais.']};$('pageTitle').textContent=pages[to][0];$('pageSub').textContent=pages[to][1];render();}
 function render(){const items=currentItems(),income=sum(items,'Receita'),expense=sum(items,'Despesa'),balance=income-expense,pending=items.filter(x=>x.type==='Despesa'&&x.status==='Pendente').reduce((a,x)=>a+x.amount,0);
   $('income').textContent=money(income);$('expenses').textContent=money(expense);$('balance').textContent=money(balance);$('savings').textContent=income?`${Math.round(balance/income*100)}%`:'—';$('balance').style.color=balance<0?'#ffd1be':'white';
   const vaIncome=items.filter(x=>x.type==='Receita'&&x.category==='Vale-alimentação').reduce((n,x)=>n+x.amount,0);
@@ -405,7 +408,7 @@ function renderAnalysis(){
 }
 
 async function performSave(fn,ok){if(!connected){notify('Abra o painel pelo Excel antes de salvar dados.');return false;}try{await fn();await refresh();notify(ok);return true;}catch(err){console.error(err);notify('Não foi possível salvar: '+(err.message||err));return false;}}
-function bind(){bindPlanning();if($('openWindow')){if(popupMode)$('openWindow').style.display='none';else $('openWindow').onclick=openSeparateWindow;}document.querySelectorAll('.nav').forEach(b=>b.addEventListener('click',()=>go(b.dataset.screen)));document.querySelectorAll('input[name=type]').forEach(el=>el.addEventListener('change',populateCategories));
+function bind(){bindPlanning();if($('openWindow')){if(popupMode)$('openWindow').style.display='none';else $('openWindow').onclick=openSeparateWindow;}document.querySelectorAll('input[name=type]').forEach(el=>el.addEventListener('change',populateCategories));
 $('configureRecurring').onclick=()=>go('recurring');
 $('recurringCancel').onclick=resetRecurringForm;
 $('recurringForm').onsubmit=async e=>{e.preventDefault();const rule={id:$('recurringId').value||('R-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)),kind:$('recurringKind').value,description:$('recurringDescription').value.trim(),amount:Number($('recurringAmount').value),day:Number($('recurringDay').value),account:$('recurringAccount').value.trim(),start:$('recurringStart').value,end:$('recurringEnd').value,autoPaid:$('recurringAutoPaid').checked,active:true};
@@ -417,7 +420,7 @@ $('analysisDays').onclick=e=>{const b=e.target.closest('[data-a-day]');if(!b)ret
 $('clearAnalysis').onclick=()=>{analysisCategory='';analysisDay=0;renderAnalysis();};
 $('categoryLegend').onclick=e=>{const b=e.target.closest('[data-category-link]');if(!b)return;analysisCategory=b.dataset.categoryLink;analysisDay=0;go('analysis');};
 $('barChart').onclick=e=>{const b=e.target.closest('[data-month-link]');if(!b)return;$('month').value=b.dataset.monthLink;analysisCategory='';analysisDay=0;refresh();go('analysis');};
-$('viewAll').onclick=()=>go('transactions');$('viewBudgets').onclick=()=>go('budgets');$('newBtn').onclick=()=>modal();$('closeModal').onclick=closeModal;$('cancel').onclick=closeModal;$('modal').onclick=e=>{if(e.target.id==='modal')closeModal();};$('month').addEventListener('change',refresh);$('search').oninput=render;$('typeFilter').onchange=render;$('reloadBtn').onclick=refresh;$('backupBtn').onclick=refresh;
+$('viewAll').onclick=()=>go('transactions');$('viewBudgets').onclick=()=>go('budgets');$('newBtn').onclick=()=>modal();$('closeModal').onclick=closeModal;$('cancel').onclick=closeModal;$('modal').onclick=e=>{if(e.target.id==='modal')closeModal();};$('month').addEventListener('change',refresh);$('search').oninput=render;$('typeFilter').onchange=render;$('reloadBtn').onclick=refresh;
 $('entryForm').onsubmit=async e=>{e.preventDefault();const type=document.querySelector('input[name=type]:checked').value;const item={id:$('entryId').value||newId(),type,description:$('description').value.trim(),amount:Number($('amount').value),date:$('date').value,category:$('category').value,account:$('account').value,notes:$('notes').value,status:$('status').value};if(!item.date||!item.description||!item.category||!(item.amount>0))return notify('Preencha a data, categoria, descrição e valor positivo.');if(fixedPayment && (item.type!=='Despesa'||item.date.slice(0,7)!==fixedPayment.month))return notify('Mantenha a conta como despesa na competência selecionada.');
 const submit=e.currentTarget.querySelector('button[type=submit]');
 submit.disabled=true;

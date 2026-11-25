@@ -40,3 +40,11 @@ Branch `manutencao/painel-praia`, baseada no candidato 6.1.0. A revisão desta e
 - As artes genéricas foram geradas pelo Canva e empacotadas com o suplemento. A praia abre a visão geral, o aeroporto identifica receitas e o trem da Serra do Mar identifica despesas. Orçamento, reserva, análise e fechamento usam as outras cenas com cores de tela próprias.
 - Validação no Edge com Office.js simulado: cadastro, orçamento, valor real, pagamento, aporte, cálculo do imóvel e largura móvel. Os testes Node cobrem a aritmética, os resgates e a proteção contra repetição, além da regressão de recorrências.
 - Antes de publicar, valide em pasta fictícia a criação de `tblPlanejamento`, a gravação pela faixa e pelo painel, o fechamento e a reabertura do XLSX. Confira também um Excel de outra máquina compatível. O Office Dialog controla os botões nativos e a barra de título. Use o painel lateral como opção integrada sem a barra do diálogo. Uma aplicação independente com controles próprios exigiria uma integração diferente com o XLSX.
+
+## 24/11/2026 — candidato 6.3.0 com navegação por cartões
+
+A versão organiza a interface com cabeçalho horizontal, competência e ações no topo e seis cartões na página inicial. A navegação usa botões acessíveis por teclado. A lateral foi removida do HTML. O cabeçalho aplica um degradê de mar, vegetação e areia e os cartões reaproveitam o atlas ilustrado produzido no Canva para o projeto.
+
+Alterações em `index.html`, `style.css` e `app.js`. A camada Office.js e as tabelas da pasta de trabalho continuam com o fluxo da versão 6.2.0. O candidato segue isolado de produção. O GitHub Pages existente atende à hospedagem dos assets estáticos pelo plano gratuito de repositório público. Um CMS não é necessário para essa arquitetura.
+
+Os onze testes Node passaram. A demonstração offline foi empacotada no HTML já entregue pelo mesmo caminho e com a mesma chave de armazenamento do navegador. O aceite no Excel desktop continua pendente.

@@ -12,3 +12,8 @@
 - Adiciona despesas fixas com valor do orçamento ou valor real e acesso direto ao lançamento.
 - Adiciona reserva, histórico, caixa confirmado e simulador de entrada imobiliária.
 - Aplica artes do Canva e cores por tela.
+
+## 6.3.0 — candidato
+
+- Substitui a lateral por navegação no topo e cartões ilustrados na página inicial.
+- Atualiza o tema com um degradê litorâneo e adaptação a telas estreitas.
