@@ -29,3 +29,14 @@ A janela existente e o caminho pelo painel lateral foram preservados no código.
 ### Verificação do arquivo de teste
 
 A pasta de trabalho fictícia, criada fora do repositório, abriu no Excel desktop 16.0 em modo somente leitura. O Excel enumerou as quatro tabelas e abas esperadas, com a aba Recorrentes ausente. Esse teste verifica o arquivo e seu esquema. O suplemento candidato ainda precisa executar no mesmo Excel para validar o runtime, a migração, a persistência e os gráficos.
+
+## 24/11/2026 — candidato 6.2.0 com foco em lançamentos
+
+Branch `manutencao/painel-praia`, baseada no candidato 6.1.0. A revisão desta etapa agrupa as mudanças em `app.js`, `planning.js`, `index.html`, `style.css`, `artes-canva.png` e em testes de planejamento e recorrências. O arquivo de dados do usuário ficou intocado.
+
+- Despesas fixas e reserva ficam em `Planejamento/tblPlanejamento`, criada ao gravar. A leitura é independente das tabelas financeiras anteriores. Se já existir uma aba com estrutura incompatível, a gravação é interrompida para preservar seu conteúdo.
+- Um custo fixo usa a competência selecionada e um ID estável por conta e mês. O formulário abre como Pendente. O valor previsto pode ser substituído pelo orçamento integral da categoria ou pelo valor real. Confirme Pago depois do pagamento. Lançamentos pagos podem ser revistos no formulário existente.
+- A reserva registra aportes, resgates e rendimentos realizados. Aportes e resgates ajustam o caixa confirmado do mês, sem somar essas transferências às receitas e despesas. A simulação parte de R$ 500 mil e 30% e usa o saldo guardado. Preço e percentual são editáveis durante a sessão.
+- As artes genéricas foram geradas pelo Canva e empacotadas com o suplemento. A praia abre a visão geral, o aeroporto identifica receitas e o trem da Serra do Mar identifica despesas. Orçamento, reserva, análise e fechamento usam as outras cenas com cores de tela próprias.
+- Validação no Edge com Office.js simulado: cadastro, orçamento, valor real, pagamento, aporte, cálculo do imóvel e largura móvel. Os testes Node cobrem a aritmética, os resgates e a proteção contra repetição, além da regressão de recorrências.
+- Antes de publicar, valide em pasta fictícia a criação de `tblPlanejamento`, a gravação pela faixa e pelo painel, o fechamento e a reabertura do XLSX. Confira também um Excel de outra máquina compatível. O Office Dialog controla os botões nativos e a barra de título. Use o painel lateral como opção integrada sem a barra do diálogo. Uma aplicação independente com controles próprios exigiria uma integração diferente com o XLSX.

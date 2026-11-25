@@ -31,3 +31,9 @@ GitHub Pages não cobra para este repositório público dentro dos limites da of
 Quando a versão candidata estiver disponível no ambiente de teste ou no Pages, confira o número abaixo do título da interface. Para tentar atualizar o código, dê foco ao **Painel lateral** e pressione **Ctrl+F5**. Se necessário, abra **Arquivo → Opções → Central de Confiabilidade → Configurações da Central de Confiabilidade → Catálogos de Suplementos Confiáveis** e marque a opção de limpar o cache dos suplementos Web na próxima inicialização. Salve o trabalho e reinicie o Excel. Essa opção limpa o cache de suplementos do Office. [Microsoft Learn](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/clear-cache)
 
 Os passos de validação da versão candidata e de reversão estão no [handover técnico](HANDOVER.md).
+
+## Custos fixos e reserva na versão candidata 6.2
+
+Em **Despesas fixas**, cadastre uma conta e abra **Lançar conta** na competência desejada. Use o orçamento da categoria ou informe o valor real. Confirme o pagamento na própria movimentação. Em **Reserva e imóvel**, registre aportes, resgates e rendimentos e informe preço e percentual de entrada. Os dados são gravados na mesma pasta de trabalho.
+
+Em outro computador, abra a mesma pasta de trabalho com o suplemento disponível em um Excel compatível e acesso à internet para carregar a interface. O painel lateral é a opção integrada sem a barra de endereço da janela separada. As opções de distribuição e o comportamento do diálogo variam conforme a plataforma e a instalação do Office.

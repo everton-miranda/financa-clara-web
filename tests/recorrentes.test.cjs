@@ -72,6 +72,7 @@ function fixture({ cells, tableName, failAdd, closed } = {}) {
     console: {error: (_, log) => logs.push(log)}
   };
   vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(path.join(root, 'planning.js'), 'utf8'), sandbox);
   vm.runInContext(source + '\nconnected = true;', sandbox);
   return {read: () => sandbox.readAll('2026-02'), entries, tables, sheet, logs};
 }
