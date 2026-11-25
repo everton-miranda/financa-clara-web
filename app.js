@@ -55,7 +55,7 @@ function openSeparateWindow() {
   dialogOpening=true;
   return new Promise((resolve,reject)=>{
     try{
-      Office.context.ui.displayDialogAsync(location.origin+location.pathname+'?popup=1',{height:98,width:98},result=>{
+      Office.context.ui.displayDialogAsync(location.origin+location.pathname+'?cf_build=6.2.1&popup=1',{height:98,width:98},result=>{
         dialogOpening=false;
         if(result.status!==Office.AsyncResultStatus.Succeeded){
           const error=new Error('Não foi possível abrir a janela: '+(result.error?.message||'erro desconhecido'));
