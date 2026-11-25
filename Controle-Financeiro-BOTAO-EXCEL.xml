@@ -4,7 +4,7 @@
  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
  xsi:type="TaskPaneApp">
   <Id>2c56479a-718f-45ed-80e5-47a83b6b53d6</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.0.1.0</Version>
   <ProviderName>Controle Financeiro</ProviderName>
   <DefaultLocale>pt-BR</DefaultLocale>
   <DisplayName DefaultValue="Controle Financeiro"/>
@@ -20,7 +20,7 @@
       <Set Name="SharedRuntime" MinVersion="1.1"/>
     </Sets>
   </Requirements>
-  <DefaultSettings><SourceLocation DefaultValue="https://everton-miranda.github.io/financa-clara-web/index.html"/></DefaultSettings>
+  <DefaultSettings><SourceLocation DefaultValue="https://everton-miranda.github.io/financa-clara-web/index.html?cf_build=6.2.1"/></DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
@@ -78,7 +78,7 @@
         <bt:Image id="CF.Icon80" DefaultValue="https://everton-miranda.github.io/financa-clara-web/icon-64.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="CF.App.Url" DefaultValue="https://everton-miranda.github.io/financa-clara-web/index.html"/>
+        <bt:Url id="CF.App.Url" DefaultValue="https://everton-miranda.github.io/financa-clara-web/index.html?cf_build=6.2.1"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="CF.Group.Label" DefaultValue="Controle Financeiro"/>
